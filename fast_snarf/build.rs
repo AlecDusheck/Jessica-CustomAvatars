@@ -6,17 +6,25 @@ fn main() {
     let cuda_include = cuda.join("include");
     let libtorch = PathBuf::from("/usr/local/libtorch");
 
+    println!("cargo:warning=CUDA_PATH: {:?}", cuda);
+    println!("cargo:warning=libtorch path: {:?}", libtorch);
+
     println!("cargo:rustc-link-search=native={}", cuda.join("lib64").display());
     println!("cargo:rustc-link-search=native={}", libtorch.join("lib").display());
 
-    // Link PyTorch libraries
-    println!("cargo:rustc-link-lib=torch");
-    println!("cargo:rustc-link-lib=c10_cuda");
-    println!("cargo:rustc-link-lib=torch_cuda");
+    println!("cargo:rustc-link-arg=-Wl,--copy-dt-needed-entries");
 
-    // Link CUDA libraries
+    // Link libraries
+    println!("cargo:rustc-link-lib=stdc++");
     println!("cargo:rustc-link-lib=cudart");
+    println!("cargo:rustc-link-lib=c10");
+    println!("cargo:rustc-link-lib=torch_cpu");
+    println!("cargo:rustc-link-lib=torch");
+    println!("cargo:rustc-link-lib=torch_cuda");
+    println!("cargo:rustc-link-lib=c10_cuda");
+    println!("cargo:rustc-link-libb=gomp");
 
+    // Rest of your build script...
     cc::Build::new()
         .cuda(true)
         .cpp(true)
