@@ -1,4 +1,4 @@
-use fast_snarf::filter;
+use fast_snarf::filter::filter;
 use tch::{Tensor, Kind, Device};
 
 fn example_filter() -> Tensor {

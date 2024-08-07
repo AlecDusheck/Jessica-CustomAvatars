@@ -9,3 +9,7 @@ torch-sys = "0.16.0"
 
 [build-dependencies]
 cc = "1.0"
+
+[env]
+LIBTORCH = { value = "/usr/local/libtorch", relative = false }
+TORCH_CUDA_VERSION = "cu121"

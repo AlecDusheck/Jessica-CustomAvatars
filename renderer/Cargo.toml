@@ -1,12 +1,11 @@
 [package]
-name = "JessicaInference"
+name = "renderer"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 tch = "0.16.0"
-fast_snarf = { path = "./fast_snarf" }
-renderer = { path = "./renderer" }
+torch-sys = "0.16.0"
 
 [build-dependencies]
 cc = "1.0"
