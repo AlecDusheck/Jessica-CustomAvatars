@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 tch = "0.16.0"
+torch-sys = "0.16.0"
 
 [build-dependencies]
 cc = "1.0"

@@ -1,4 +1,3 @@
 mod cuda;
-mod filter;
 
-pub use filter::filter;
+pub use cuda::filter;
