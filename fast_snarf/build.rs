@@ -12,7 +12,7 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", cuda.join("lib64").display());
     println!("cargo:rustc-link-search=native={}", libtorch.join("lib").display());
 
-    println!("cargo:rustc-link-arg=-Wl,--copy-dt-needed-entries");
+    // println!("cargo:rustc-link-arg=-Wl,--copy-dt-needed-entries");
 
     // Link libraries
     println!("cargo:rustc-link-lib=stdc++");
@@ -22,7 +22,7 @@ fn main() {
     println!("cargo:rustc-link-lib=torch");
     println!("cargo:rustc-link-lib=torch_cuda");
     println!("cargo:rustc-link-lib=c10_cuda");
-    println!("cargo:rustc-link-libb=gomp");
+    println!("cargo:rustc-link-lib=gomp");
 
     // Rest of your build script...
     cc::Build::new()

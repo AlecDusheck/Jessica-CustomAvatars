@@ -5,7 +5,7 @@ pub fn filter(x: &Tensor, mask: &Tensor) -> Tensor {
     assert_eq!(x.kind(), Kind::Float, "x must be a float tensor");
     assert_eq!(mask.kind(), Kind::Bool, "mask must be a boolean tensor");
 
-    tch::Cuda::synchronize(0);
+    // tch::Cuda::synchronize(0);
 
     if !tch::Cuda::is_available() {
         panic!("CUDA is not available")
@@ -26,8 +26,6 @@ pub fn filter(x: &Tensor, mask: &Tensor) -> Tensor {
     unsafe {
         c_filter(output.as_mut_ptr(), x.as_ptr(), mask.as_ptr());
     };
-
-    tch::Cuda::synchronize(0);
 
     output
 }
