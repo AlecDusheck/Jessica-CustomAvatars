@@ -1,0 +1,3 @@
+[submodule "knn_points"]
+	path = knn_points
+	url = git@github.com:TriformHQ/knn-points-rs.git
