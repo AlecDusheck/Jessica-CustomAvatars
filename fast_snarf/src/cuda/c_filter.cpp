@@ -9,4 +9,10 @@ void launch_filter(const torch::Tensor &output, const torch::Tensor &x, const to
 
 extern "C" void c_filter(const torch::Tensor &output, const torch::Tensor &x, const torch::Tensor &mask) {
     launch_filter(output, x, mask);
+    try {
+        launch_filter(output, x, mask);
+    } catch (const std::exception& e) {
+        std::cerr << "C++ exception caught: " << e.what() << std::endl;
+        // TODO:Set an error flag or return an error code here
+    }
 }

@@ -1,21 +1,22 @@
 use tch::Tensor;
 use crate::tensor_utils::validate_tensor;
+use crate::tensor_utils::validate_tensor_type;
 
 pub fn fuse(
-    mut x: Tensor,
+    x: &mut Tensor,
     xd_tgt: &Tensor,
     grid: &Tensor,
     grid_j_inv: &Tensor,
     tfs: &Tensor,
     bone_ids: &Tensor,
     align_corners: bool,
-    mut j_inv: Tensor,
-    mut is_valid: Tensor,
+    j_inv: &mut Tensor,
+    is_valid: &mut Tensor,
     offset: &Tensor,
     scale: &Tensor,
     cvg_threshold: f32,
     dvg_threshold: f32,
-) -> (Tensor, Tensor, Tensor) {
+) -> () {
     let batch_size = x.size()[0];
 
     // Perform dimension checks
@@ -29,6 +30,17 @@ pub fn fuse(
     validate_tensor(&is_valid, &[batch_size, 200000, 9], "is_valid");
     validate_tensor(offset, &[batch_size, 1, 3], "offset");
     validate_tensor(scale, &[batch_size, 1, 3], "scale");
+
+    validate_tensor_type(&x, tch::Kind::Float, "x");
+    validate_tensor_type(xd_tgt, tch::Kind::Float, "xd_tgt");
+    validate_tensor_type(grid, tch::Kind::Float, "grid");
+    validate_tensor_type(grid_j_inv, tch::Kind::Float, "grid_J_inv");
+    validate_tensor_type(tfs, tch::Kind::Float, "tfs");
+    validate_tensor_type(bone_ids, tch::Kind::Int, "bone_ids");
+    validate_tensor_type(&j_inv, tch::Kind::Float, "J_inv");
+    validate_tensor_type(&is_valid, tch::Kind::Bool, "is_valid");
+    validate_tensor_type(offset, tch::Kind::Float, "offset");
+    validate_tensor_type(scale, tch::Kind::Float, "scale");
 
     // Check CUDA availability
     assert!(tch::Cuda::is_available(), "CUDA is not available");
@@ -54,6 +66,4 @@ pub fn fuse(
             dvg_threshold,
         );
     }
-
-    (x, j_inv, is_valid)
 }

@@ -90,7 +90,7 @@ fn test_filter_all_false_mask() {
 #[test]
 fn test_filter_proximity() {
     let device = Device::Cuda(0);
-    let mut x = Tensor::zeros(&[1, 1, 5, 3], (Kind::Float, device));
+    let x = Tensor::zeros(&[1, 1, 5, 3], (Kind::Float, device));
     x.select(2, 0).copy_(&Tensor::from_slice(&[0.0, 0.0, 0.0]));
     x.select(2, 1).copy_(&Tensor::from_slice(&[1.0, 0.0, 0.0]));
     x.select(2, 2).copy_(&Tensor::from_slice(&[0.0, 1.0, 0.0]));
@@ -119,7 +119,7 @@ fn test_filter_proximity() {
 #[test]
 fn test_filter_proximity_with_mask() {
     let device = Device::Cuda(0);
-    let mut x = Tensor::zeros(&[1, 1, 5, 3], (Kind::Float, device));
+    let x = Tensor::zeros(&[1, 1, 5, 3], (Kind::Float, device));
     x.select(2, 0).copy_(&Tensor::from_slice(&[0.0, 0.0, 0.0]));
     x.select(2, 1).copy_(&Tensor::from_slice(&[0.00005, 0.0, 0.0]));
     x.select(2, 2).copy_(&Tensor::from_slice(&[1.0, 0.0, 0.0]));

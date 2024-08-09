@@ -1,76 +1,201 @@
 use fast_snarf::fuse::fuse;
-use tch::{Device, Kind, Tensor};
+use tch::{Device, Tensor};
 
 #[test]
-fn test_fuse() {
-    // Skip the test if CUDA is not available
-    if !tch::Cuda::is_available() {
-        println!("CUDA not available, skipping test_fuse");
-        return;
-    }
+fn test_fuse_valid_input() {
+    let device = Device::Cuda(0);
+    let batch_size = 2;
 
-    // Create sample input tensors
-    use fast_snarf::fuse::fuse;
-    use tch::{Device, Kind, Tensor};
+    let mut x = Tensor::randn(&[batch_size, 200000, 9, 3], (tch::Kind::Float, device));
+    let xd_tgt = Tensor::randn(&[batch_size, 200000, 3], (tch::Kind::Float, device));
+    let grid = Tensor::randn(&[batch_size, 3, 8, 32, 32], (tch::Kind::Float, device));
+    let grid_j_inv = Tensor::randn(&[batch_size, 9, 8, 32, 32], (tch::Kind::Float, device));
+    let tfs = Tensor::randn(&[batch_size, 24, 4, 4], (tch::Kind::Float, device));
+    let bone_ids = Tensor::randint(9, &[9], (tch::Kind::Int, device));
+    let mut j_inv = Tensor::randn(&[batch_size, 200000, 9, 3, 3], (tch::Kind::Float, device));
+    let mut is_valid = Tensor::ones(&[batch_size, 200000, 9], (tch::Kind::Bool, device));
+    let offset = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+    let scale = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
 
-    #[test]
-    fn test_fuse() {
-        // Skip the test if CUDA is not available
-        if !tch::Cuda::is_available() {
-            println!("CUDA not available, skipping test_fuse");
-            return;
-        }
+    let align_corners = true;
+    let cvg_threshold = 1e-5;
+    let dvg_threshold = 1e5;
 
-        let device = Device::Cuda(0);
+    fuse(
+        &mut x,
+        &xd_tgt,
+        &grid,
+        &grid_j_inv,
+        &tfs,
+        &bone_ids,
+        align_corners,
+        &mut j_inv,
+        &mut is_valid,
+        &offset,
+        &scale,
+        cvg_threshold,
+        dvg_threshold,
+    );
 
-        // Create sample input tensors
-        let batch_size = 1;
-        let n_points = 200000;
-        let n_bones = 9;
+    assert_eq!(x.size(), &[batch_size, 200000, 9, 3]);
+    assert_eq!(j_inv.size(), &[batch_size, 200000, 9, 3, 3]);
+    assert_eq!(is_valid.size(), &[batch_size, 200000, 9]);
+}
 
-        let x = Tensor::rand(&[batch_size, n_points, n_bones, 3], (Kind::Float, device));
-        let xd_tgt = Tensor::rand(&[batch_size, n_points, 3], (Kind::Float, device));
-        let grid = Tensor::rand(&[batch_size, 3, 8, 32, 32], (Kind::Float, device));
-        let grid_j_inv = Tensor::rand(&[batch_size, 9, 8, 32, 32], (Kind::Float, device));
-        let tfs = Tensor::rand(&[batch_size, 24, 4, 4], (Kind::Float, device));
-        let bone_ids = Tensor::from_slice(&[0i64, 1, 2, 3, 4, 5, 6, 7, 8]).to(device);
-        let j_inv = Tensor::rand(&[batch_size, n_points, n_bones, 9], (Kind::Float, device));
-        let is_valid = Tensor::ones(&[batch_size, n_points, n_bones], (Kind::Bool, device));
-        let offset = Tensor::rand(&[batch_size, 1, 3], (Kind::Float, device));
-        let scale = Tensor::rand(&[batch_size, 1, 3], (Kind::Float, device));
+#[test]
+#[should_panic(expected = "assertion `left == right` failed: x dimension 3 is 4, expected 3\n  left: 4\n right: 3")]
+fn test_fuse_invalid_x_shape() {
+    let device = Device::Cuda(0);
+    let batch_size = 2;
 
-        let align_corners = true;
-        let cvg_threshold = 1e-4;
-        let dvg_threshold = 1e2;
+    let mut x = Tensor::randn(&[batch_size, 200000, 9, 4], (tch::Kind::Float, device));
+    let xd_tgt = Tensor::randn(&[batch_size, 200000, 3], (tch::Kind::Float, device));
+    let grid = Tensor::randn(&[batch_size, 3, 8, 32, 32], (tch::Kind::Float, device));
+    let grid_j_inv = Tensor::randn(&[batch_size, 9, 8, 32, 32], (tch::Kind::Float, device));
+    let tfs = Tensor::randn(&[batch_size, 24, 4, 4], (tch::Kind::Float, device));
+    let bone_ids = Tensor::randint(9, &[9], (tch::Kind::Int, device));
+    let mut j_inv = Tensor::randn(&[batch_size, 200000, 9, 3, 3], (tch::Kind::Float, device));
+    let mut is_valid = Tensor::ones(&[batch_size, 200000, 9], (tch::Kind::Bool, device));
+    let offset = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+    let scale = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
 
-        println!("Calling fuse function...");
-        // Call the fuse function
-        let (x_out, j_inv_out, is_valid_out) = fuse(
-            x.shallow_clone(),
-            &xd_tgt,
-            &grid,
-            &grid_j_inv,
-            &tfs,
-            &bone_ids,
-            align_corners,
-            j_inv.shallow_clone(),
-            is_valid.shallow_clone(),
-            &offset,
-            &scale,
-            cvg_threshold,
-            dvg_threshold,
-        );
+    let align_corners = true;
+    let cvg_threshold = 1e-5;
+    let dvg_threshold = 1e5;
 
-        println!("Fuse function completed successfully.");
+    fuse(
+        &mut x,
+        &xd_tgt,
+        &grid,
+        &grid_j_inv,
+        &tfs,
+        &bone_ids,
+        align_corners,
+        &mut j_inv,
+        &mut is_valid,
+        &offset,
+        &scale,
+        cvg_threshold,
+        dvg_threshold,
+    );
+}
 
-        // Check that the output tensors have the correct shapes
-        assert_eq!(x_out.size(), x.size());
-        assert_eq!(j_inv_out.size(), j_inv.size());
-        assert_eq!(is_valid_out.size(), is_valid.size());
+#[test]
+#[should_panic(expected = "bone_ids: Expected tensor kind `Int`, got `Float`")]
+fn test_fuse_invalid_bone_ids_type() {
+    let device = Device::Cuda(0);
+    let batch_size = 2;
 
-        // Check that the output tensors have valid values
-        assert_eq!(x_out.isfinite().all().int64_value(&[]), 1);
-        assert_eq!(j_inv_out.isfinite().all().int64_value(&[]), 1);
-        assert!(is_valid_out.to_kind(Kind::Uint8).sum(Kind::Float).int64_value(&[]) > 0);
-    }
+    let mut x = Tensor::randn(&[batch_size, 200000, 9, 3], (tch::Kind::Float, device));
+    let xd_tgt = Tensor::randn(&[batch_size, 200000, 3], (tch::Kind::Float, device));
+    let grid = Tensor::randn(&[batch_size, 3, 8, 32, 32], (tch::Kind::Float, device));
+    let grid_j_inv = Tensor::randn(&[batch_size, 9, 8, 32, 32], (tch::Kind::Float, device));
+    let tfs = Tensor::randn(&[batch_size, 24, 4, 4], (tch::Kind::Float, device));
+    let bone_ids = Tensor::randint(9, &[9], (tch::Kind::Float, device));
+    let mut j_inv = Tensor::randn(&[batch_size, 200000, 9, 3, 3], (tch::Kind::Float, device));
+    let mut is_valid = Tensor::ones(&[batch_size, 200000, 9], (tch::Kind::Bool, device));
+    let offset = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+    let scale = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+
+    let align_corners = true;
+    let cvg_threshold = 1e-5;
+    let dvg_threshold = 1e5;
+
+    fuse(
+        &mut x,
+        &xd_tgt,
+        &grid,
+        &grid_j_inv,
+        &tfs,
+        &bone_ids,
+        align_corners,
+        &mut j_inv,
+        &mut is_valid,
+        &offset,
+        &scale,
+        cvg_threshold,
+        dvg_threshold,
+    );
+}
+
+#[test]
+fn test_fuse_align_corners_false() {
+    let device = Device::Cuda(0);
+    let batch_size = 2;
+
+    let mut x = Tensor::randn(&[batch_size, 200000, 9, 3], (tch::Kind::Float, device));
+    let xd_tgt = Tensor::randn(&[batch_size, 200000, 3], (tch::Kind::Float, device));
+    let grid = Tensor::randn(&[batch_size, 3, 8, 32, 32], (tch::Kind::Float, device));
+    let grid_j_inv = Tensor::randn(&[batch_size, 9, 8, 32, 32], (tch::Kind::Float, device));
+    let tfs = Tensor::randn(&[batch_size, 24, 4, 4], (tch::Kind::Float, device));
+    let bone_ids = Tensor::randint(9, &[9], (tch::Kind::Int, device));
+    let mut j_inv = Tensor::randn(&[batch_size, 200000, 9, 3, 3], (tch::Kind::Float, device));
+    let mut is_valid = Tensor::ones(&[batch_size, 200000, 9], (tch::Kind::Bool, device));
+    let offset = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+    let scale = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+
+    let align_corners = false;
+    let cvg_threshold = 1e-5;
+    let dvg_threshold = 1e5;
+
+    fuse(
+        &mut x,
+        &xd_tgt,
+        &grid,
+        &grid_j_inv,
+        &tfs,
+        &bone_ids,
+        align_corners,
+        &mut j_inv,
+        &mut is_valid,
+        &offset,
+        &scale,
+        cvg_threshold,
+        dvg_threshold,
+    );
+
+    assert_eq!(x.size(), &[batch_size, 200000, 9, 3]);
+    assert_eq!(j_inv.size(), &[batch_size, 200000, 9, 3, 3]);
+    assert_eq!(is_valid.size(), &[batch_size, 200000, 9]);
+}
+
+#[test]
+fn test_fuse_different_thresholds() {
+    let device = Device::Cuda(0);
+    let batch_size = 2;
+
+    let mut x = Tensor::randn(&[batch_size, 200000, 9, 3], (tch::Kind::Float, device));
+    let xd_tgt = Tensor::randn(&[batch_size, 200000, 3], (tch::Kind::Float, device));
+    let grid = Tensor::randn(&[batch_size, 3, 8, 32, 32], (tch::Kind::Float, device));
+    let grid_j_inv = Tensor::randn(&[batch_size, 9, 8, 32, 32], (tch::Kind::Float, device));
+    let tfs = Tensor::randn(&[batch_size, 24, 4, 4], (tch::Kind::Float, device));
+    let bone_ids = Tensor::randint(9, &[9], (tch::Kind::Int, device));
+    let mut j_inv = Tensor::randn(&[batch_size, 200000, 9, 3, 3], (tch::Kind::Float, device));
+    let mut is_valid = Tensor::ones(&[batch_size, 200000, 9], (tch::Kind::Bool, device));
+    let offset = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+    let scale = Tensor::randn(&[batch_size, 1, 3], (tch::Kind::Float, device));
+
+    let align_corners = true;
+    let cvg_threshold = 1e-3;
+    let dvg_threshold = 1e3;
+
+    fuse(
+        &mut x,
+        &xd_tgt,
+        &grid,
+        &grid_j_inv,
+        &tfs,
+        &bone_ids,
+        align_corners,
+        &mut j_inv,
+        &mut is_valid,
+        &offset,
+        &scale,
+        cvg_threshold,
+        dvg_threshold,
+    );
+
+    assert_eq!(x.size(), &[batch_size, 200000, 9, 3]);
+    assert_eq!(j_inv.size(), &[batch_size, 200000, 9, 3, 3]);
+    assert_eq!(is_valid.size(), &[batch_size, 200000, 9]);
 }
