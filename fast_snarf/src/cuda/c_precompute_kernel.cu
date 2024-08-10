@@ -23,12 +23,15 @@ template <typename scalar_t, typename index_t>
 C10_LAUNCH_BOUNDS_1(512)
 __global__ void precompute_kernel(
     const index_t npoints, const index_t d, const index_t h, const index_t w,
-    PackedTensorAccessor32<scalar_t, 5> voxel_w, // shape=(N,200000, 9, 3)
-    PackedTensorAccessor32<scalar_t, 4> tfs,     // shape=(N,200000, 3)
-    PackedTensorAccessor32<scalar_t, 5> voxel_d, // shape=(N,3,8,32,32)
-    PackedTensorAccessor32<scalar_t, 5> voxel_J, // shape=(N,9,8,32,32)
+    // These tensor sizes given as (shape=...) ARE LIKELY WRONG... DO NOT TRUST!!!!
+    PackedTensorAccessor32<scalar_t, 5> voxel_w, // shape=(N, 24, d, h, w)
+    PackedTensorAccessor32<scalar_t, 4> tfs,     // shape=(N, 24, 3, 4)
+    PackedTensorAccessor32<scalar_t, 5> voxel_d, // shape=(N, 3, d, h, w)
+    PackedTensorAccessor32<scalar_t, 5> voxel_J, // shape=(N, 9, d, h, w)
     PackedTensorAccessor32<scalar_t, 3> offset,  // shape=(N, 1, 3)
     PackedTensorAccessor32<scalar_t, 3> scale    // shape=(N, 1, 3)
+
+    // You'll need to look at the functions below to find the real tensor sizes.
 ) {
   index_t index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index >= npoints)

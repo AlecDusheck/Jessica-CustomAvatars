@@ -253,14 +253,14 @@ __global__ void broyden_kernel(
     const index_t npoints, const index_t n_batch, const index_t n_point,
     const index_t n_init, TensorInfo<scalar_t, index_t> voxel_ti,
     TensorInfo<scalar_t, index_t> voxel_J_ti,
-    PackedTensorAccessor32<scalar_t, 4> x,          // shape=(N,200000, 9, 3)
-    PackedTensorAccessor32<scalar_t, 3> xd_tgt,     // shape=(N,200000, 3)
-    PackedTensorAccessor32<scalar_t, 5> voxel,      // shape=(N,3,8,32,32)
-    PackedTensorAccessor32<scalar_t, 5> grid_J_inv, // shape=(N,9,8,32,32)
-    PackedTensorAccessor32<scalar_t, 4> tfs,        // shape=(N,24,4,4)
-    PackedTensorAccessor32<int, 1> bone_ids,        // shape=(9)
-    PackedTensorAccessor32<scalar_t, 5> J_inv,      // shape=(N,200000, 9, 9)
-    PackedTensorAccessor32<bool, 3> is_valid,       // shape=(N,200000, 9)
+    PackedTensorAccessor32<scalar_t, 4> x,          // shape=(N, n_point, n_init, 3)
+    PackedTensorAccessor32<scalar_t, 3> xd_tgt,     // shape=(N, n_point, 3)
+    PackedTensorAccessor32<scalar_t, 5> voxel,      // shape=(N, 3, d, h, w)
+    PackedTensorAccessor32<scalar_t, 5> grid_J_inv, // shape=(N, 9, d, h, w)
+    PackedTensorAccessor32<scalar_t, 4> tfs,        // shape=(N, n_bone, 4, 4)
+    PackedTensorAccessor32<int, 1> bone_ids,        // shape=(n_init)
+    PackedTensorAccessor32<scalar_t, 5> J_inv,      // shape=(N, n_point, n_init, 3, 3)
+    PackedTensorAccessor32<bool, 3> is_valid,       // shape=(N, n_point, n_init)
     PackedTensorAccessor32<scalar_t, 3> offset,     // shape=(N, 1, 3)
     PackedTensorAccessor32<scalar_t, 3> scale,      // shape=(N, 1, 3)
     float cvg_threshold, float dvg_threshold, int N) {

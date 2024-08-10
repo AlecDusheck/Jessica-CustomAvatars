@@ -18,18 +18,21 @@ pub fn fuse(
     dvg_threshold: f32,
 ) -> () {
     let batch_size = x.size()[0];
+    let n_point = x.size()[1];
+    let n_init = bone_ids.size()[0];
 
     // Perform dimension checks
-    validate_tensor(&x, &[batch_size, 200000, 9, 3], "x");
-    validate_tensor(xd_tgt, &[batch_size, 200000, 3], "xd_tgt");
+    validate_tensor(&x, &[batch_size, n_point, n_init, 3], "x");
+    validate_tensor(xd_tgt, &[batch_size, n_point, 3], "xd_tgt");
     validate_tensor(grid, &[batch_size, 3, 8, 32, 32], "grid");
     validate_tensor(grid_j_inv, &[batch_size, 9, 8, 32, 32], "grid_J_inv");
     validate_tensor(tfs, &[batch_size, 24, 4, 4], "tfs");
-    validate_tensor(bone_ids, &[9], "bone_ids");
-    validate_tensor(&j_inv, &[batch_size, 200000, 9, 3, 3], "J_inv");  // Expecting 5D
-    validate_tensor(&is_valid, &[batch_size, 200000, 9], "is_valid");
+    validate_tensor(bone_ids, &[n_init], "bone_ids");
+    validate_tensor(&j_inv, &[batch_size, n_point, n_init, 3, 3], "J_inv");
+    validate_tensor(&is_valid, &[batch_size, n_point, n_init], "is_valid");
     validate_tensor(offset, &[batch_size, 1, 3], "offset");
     validate_tensor(scale, &[batch_size, 1, 3], "scale");
+
 
     validate_tensor_type(&x, tch::Kind::Float, "x");
     validate_tensor_type(xd_tgt, tch::Kind::Float, "xd_tgt");
