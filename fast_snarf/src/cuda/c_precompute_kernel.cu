@@ -23,7 +23,6 @@ template <typename scalar_t, typename index_t>
 C10_LAUNCH_BOUNDS_1(512)
 __global__ void precompute_kernel(
     const index_t npoints, const index_t d, const index_t h, const index_t w,
-    // These tensor sizes given as (shape=...) ARE LIKELY WRONG... DO NOT TRUST!!!!
     PackedTensorAccessor32<scalar_t, 5> voxel_w, // shape=(N, 24, d, h, w)
     PackedTensorAccessor32<scalar_t, 4> tfs,     // shape=(N, 24, 3, 4)
     PackedTensorAccessor32<scalar_t, 5> voxel_d, // shape=(N, 3, d, h, w)
