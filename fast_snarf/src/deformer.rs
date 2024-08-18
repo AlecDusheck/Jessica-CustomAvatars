@@ -1,9 +1,12 @@
+use std::fmt::{Debug};
 use knn_points::knn::knn_idx_cuda;
-use tch::{Device, IndexOp, Kind, Tensor};
+use tch::{Device, IndexOp, Kind, nn, Tensor};
+use tch::nn::ModuleT;
 use crate::filter::filter;
 use crate::fuse::fuse;
 use crate::precompute::precompute;
 
+#[derive(Debug)]
 pub struct ForwardDeformer {
     soft_blend: i64,
     init_bones: Vec<i64>,
@@ -22,11 +25,51 @@ pub struct ForwardDeformer {
     voxel_j: Tensor,
 }
 
+impl ModuleT for ForwardDeformer {
+    fn forward_t(&self, xs: &Tensor, train: bool) -> Tensor {
+        // The input tensor `xs` is assumed to be a concatenation of `xd` and `tfs` along the second dimension.
+        // We need to split `xs` into `xd` and `tfs` based on their original sizes.
+
+        // Get the size of the second dimension of `xs`.
+        let xs_dim1_size = xs.size()[1];
+
+        // Get the number of bones from the length of `init_bones` vector.
+        let num_bones = self.init_bones.len() as i64;
+
+        // Assume the dimension of each point is 3 (x, y, z).
+        let point_dim = 3;
+
+        // Calculate the size of the second dimension of `tfs`.
+        let tfs_dim1_size = num_bones * (point_dim + 1) * (point_dim + 1);
+
+        // Get the size of the second dimension of `xd` by subtracting the size of `tfs` from `xs_dim1_size`.
+        let xd_dim1_size = xs_dim1_size - tfs_dim1_size;
+
+        // Split `xs` into `xd` and `tfs` using the calculated sizes.
+        let split_sizes = [xd_dim1_size, tfs_dim1_size];
+        let split_tensors = xs.split_with_sizes(&split_sizes, 1);
+        let xd = split_tensors[0].shallow_clone();
+        let tfs = split_tensors[1].shallow_clone();
+
+        // Reshape `xd` to its original shape of [B, N, D], where B is the batch size, N is the number of points, and D is the dimension of each point.
+        let xd = xd.view([-1, xd_dim1_size / point_dim, point_dim]);
+
+        // Reshape `tfs` to its original shape of [B, J, D+1, D+1], where B is the batch size, J is the number of bones, and D is the dimension of each point.
+        let tfs = tfs.view([-1, num_bones, point_dim + 1, point_dim + 1]);
+
+        // Call the `forward` method with the reshaped `xd` and `tfs` tensors.
+        let (xc, (valid_ids, _)) = self.forward(&xd, &tfs, !train);
+
+        // Concatenate `xc` and `valid_ids` along the last dimension to create the final output tensor.
+        Tensor::cat(&[xc, valid_ids.unsqueeze(-1)], -1)
+    }
+}
+
 impl ForwardDeformer {
-    pub fn new(device: Device) -> Self {
+    fn new(p: &nn::Path, device: Device) -> Self {
         let soft_blend = 20;
         let init_bones = vec![0, 1, 2, 4, 5, 10, 11, 12, 15, 16, 17, 18, 19];
-        let init_bones_cuda = Tensor::from_slice(&init_bones).to_device(device).to_kind(Kind::Int);
+        let init_bones_cuda = p.var_copy("init_bones_cuda", &Tensor::from_slice(&init_bones).to_device(device).to_kind(Kind::Int64));
         let global_scale = 1.2;
 
         ForwardDeformer {
@@ -36,15 +79,15 @@ impl ForwardDeformer {
             global_scale,
             resolution: 0,
             ratio: 0.0,
-            bbox: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            scale: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            offset: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            offset_kernel: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            scale_kernel: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            lbs_voxel_final: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            grid_denorm: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            voxel_d: Tensor::zeros(&[1], (tch::Kind::Float, device)),
-            voxel_j: Tensor::zeros(&[1], (tch::Kind::Float, device)),
+            bbox: p.zeros("bbox", &[1]),
+            scale: p.zeros("scale", &[1]),
+            offset: p.zeros("offset", &[1]),
+            offset_kernel: p.zeros("offset_kernel", &[1]),
+            scale_kernel: p.zeros("scale_kernel", &[1]),
+            lbs_voxel_final: p.zeros("lbs_voxel_final", &[1]),
+            grid_denorm: p.zeros("grid_denorm", &[1]),
+            voxel_d: p.zeros("voxel_d", &[1]),
+            voxel_j: p.zeros("voxel_j", &[1]),
         }
     }
 
@@ -323,7 +366,6 @@ impl ForwardDeformer {
     }
 
     fn query_weights(&self, xc: &Tensor) -> Tensor {
-        let shape = xc.size();
         let n = 1;
         let xc = xc.view([1, -1, 3]);
 
