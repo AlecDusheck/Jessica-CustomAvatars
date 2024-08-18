@@ -1,0 +1,12 @@
+[package]
+name = "smplx"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tch = "0.16.0"
+torch-sys = "0.16.0"
+
+[env]
+LIBTORCH = { value = "/usr/local/libtorch", relative = false }
+TORCH_CUDA_VERSION = "cu121"
