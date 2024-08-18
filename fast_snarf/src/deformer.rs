@@ -58,7 +58,7 @@ impl ModuleT for ForwardDeformer {
         let tfs = tfs.view([-1, num_bones, point_dim + 1, point_dim + 1]);
 
         // Call the `forward` method with the reshaped `xd` and `tfs` tensors.
-        let (xc, (valid_ids, _)) = self.forward(&xd, &tfs, !train);
+        let (xc, (valid_ids, _)) = self.forward_impl(&xd, &tfs, !train);
 
         // Concatenate `xc` and `valid_ids` along the last dimension to create the final output tensor.
         Tensor::cat(&[xc, valid_ids.unsqueeze(-1)], -1)
@@ -109,7 +109,7 @@ impl ForwardDeformer {
     /// # Note
     ///
     /// This method assumes version 1 of the deformer.
-    pub fn forward(
+    pub fn forward_impl(
         &self,
         xd: &Tensor,
         tfs: &Tensor,
