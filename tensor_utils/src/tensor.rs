@@ -29,7 +29,7 @@ pub fn validate_tensor(tensor: &Tensor, expected_dims: &[i64], name: &str) {
 }
 
 #[cfg(not(debug_assertions))]
-pub fn validate_tensor(tensor: &Tensor, expected_dims: &[i64], name: &str) {
+pub fn validate_tensor(_tensor: &Tensor, _expected_dims: &[i64], _name: &str) {
     // Do nothing
     // For release, we assume our tensor sizes are always correct. This is a very computationally expensive function
 }
@@ -40,7 +40,7 @@ pub fn validate_tensor_type(tensor: &Tensor, expected_kind: tch::Kind, name: &st
 }
 
 #[cfg(not(debug_assertions))]
-pub fn validate_tensor_type(tensor: &Tensor, expected_kind: tch::Kind, name: &str) {
+pub fn validate_tensor_type(_tensor: &Tensor, _expected_kind: tch::Kind, _name: &str) {
     // Do nothing
     // For release, we assume our tensor sizes are always correct. This is a very computationally expensive function
 }

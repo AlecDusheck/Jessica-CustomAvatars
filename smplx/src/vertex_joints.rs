@@ -1,5 +1,6 @@
 use tch::{nn, Tensor, Kind};
 use std::collections::HashMap;
+use crate::module_utils::ModuleT;
 
 #[derive(Debug)]
 pub struct VertexJointSelector {
@@ -7,15 +8,10 @@ pub struct VertexJointSelector {
     num_joints: i64,
 }
 
-impl nn::Module for VertexJointSelector {
-    fn forward(&self, xs: &Tensor) -> Tensor {
-        let num_total_cols = xs.size()[1];
-        let num_vertex_cols = num_total_cols - self.num_joints;
-
-        let splits = xs.split(num_vertex_cols, 1);
-        let vertices = &splits[0];
-        let joints = &splits[1];
-
+impl ModuleT<(&Tensor, &Tensor)> for VertexJointSelector {
+    type Output = Tensor;
+    fn forward_t(&self, xs: (&Tensor, &Tensor), _train: bool) -> Tensor {
+        let (vertices, joints) = xs;
         let extra_joints = vertices.index_select(1, &self.extra_joints_idxs);
         Tensor::cat(&[joints, &extra_joints], 1)
     }

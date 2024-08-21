@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 tch = "0.16.0"
+torch-sys = "0.16.0"
 fast_snarf = { path = "./fast_snarf" }
 renderer = { path = "./renderer" }
 knn_points = { path = "./knn_points" }
