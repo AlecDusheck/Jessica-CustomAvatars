@@ -7,6 +7,7 @@ edition = "2021"
 tch = "0.16.0"
 torch-sys = "0.16.0"
 lazy_static = "1.4.0"
+tensor_utils = { path = "../tensor_utils" }
 
 [env]
 LIBTORCH = { value = "/usr/local/libtorch", relative = false }
