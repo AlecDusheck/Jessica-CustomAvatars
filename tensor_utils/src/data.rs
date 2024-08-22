@@ -1,11 +1,11 @@
 use tch::{Tensor, Device, Kind, TchError};
 use tch::IndexOp;
 
-/// `BigIter2` is an iterator over a pair of `Vec<Tensor>` (xs and ys).
+/// `IterN2` is an iterator over a pair of `Vec<Tensor>` (xs and ys).
 /// It allows for batch selection and indexing across all the tensors in the vectors.
 /// It is useful for models where the forward pass consumes multiple tensors and outputs multiple tensors.
 #[derive(Debug)]
-pub struct BigIter2 {
+pub struct IterN2 {
     xs: Vec<Tensor>,
     ys: Vec<Tensor>,
     batch_index: i64,
@@ -15,8 +15,8 @@ pub struct BigIter2 {
     return_smaller_last_batch: bool,
 }
 
-impl BigIter2 {
-    /// Creates a new `BigIter2` instance.
+impl IterN2 {
+    /// Creates a new `IterN2` instance.
     ///
     /// This function takes as input two `Vec<Tensor>` (xs and ys) which must have the same length
     /// and the same first dimension size for all tensors within each vector.
@@ -29,7 +29,7 @@ impl BigIter2 {
     /// * `xs` - A vector of tensors representing the features to be used by the model.
     /// * `ys` - A vector of tensors representing the targets that the model attempts to predict.
     /// * `batch_size` - The size of batches to be returned.
-    pub fn f_new(xs: &[Tensor], ys: &[Tensor], batch_size: i64) -> Result<BigIter2, TchError> {
+    pub fn f_new(xs: &[Tensor], ys: &[Tensor], batch_size: i64) -> Result<IterN2, TchError> {
         if xs.len() != ys.len() {
             return Err(TchError::Shape(format!(
                 "xs and ys have different lengths: xs={}, ys={}",
@@ -45,7 +45,7 @@ impl BigIter2 {
             }
         }
 
-        Ok(BigIter2 {
+        Ok(IterN2 {
             xs: xs.iter().map(|x| x.shallow_clone()).collect(),
             ys: ys.iter().map(|y| y.shallow_clone()).collect(),
             batch_index: 0,
@@ -56,7 +56,7 @@ impl BigIter2 {
         })
     }
 
-    /// Creates a new `BigIter2` instance.
+    /// Creates a new `IterN2` instance.
     ///
     /// This function takes as input two `Vec<Tensor>` (xs and ys) which must have the same length
     /// and the same first dimension size for all tensors within each vector.
@@ -69,8 +69,8 @@ impl BigIter2 {
     /// * `xs` - A vector of tensors representing the features to be used by the model.
     /// * `ys` - A vector of tensors representing the targets that the model attempts to predict.
     /// * `batch_size` - The size of batches to be returned.
-    pub fn new(xs: &[Tensor], ys: &[Tensor], batch_size: i64) -> BigIter2 {
-        BigIter2::f_new(xs, ys, batch_size).unwrap()
+    pub fn new(xs: &[Tensor], ys: &[Tensor], batch_size: i64) -> IterN2 {
+        IterN2::f_new(xs, ys, batch_size).unwrap()
     }
 
     /// Shuffles the dataset.
@@ -78,7 +78,7 @@ impl BigIter2 {
     /// The iterator would still run over the whole dataset, but the order in
     /// which elements are grouped in mini-batches is randomized.
     /// The shuffling is applied consistently across all tensors in `xs` and `ys`.
-    pub fn shuffle(&mut self) -> &mut BigIter2 {
+    pub fn shuffle(&mut self) -> &mut IterN2 {
         let index = Tensor::randperm(self.total_size, (Kind::Int64, self.device));
         let shuffled_xs: Vec<Tensor> = self.xs.iter().map(|x| x.index_select(0, &index)).collect();
         let shuffled_ys: Vec<Tensor> = self.ys.iter().map(|y| y.index_select(0, &index)).collect();
@@ -90,19 +90,19 @@ impl BigIter2 {
 
     /// Transfers the mini-batches to a specified device.
     #[allow(clippy::wrong_self_convention)]
-    pub fn to_device(&mut self, device: Device) -> &mut BigIter2 {
+    pub fn to_device(&mut self, device: Device) -> &mut IterN2 {
         self.device = device;
         self
     }
 
     /// When set, returns the last batch even if it is smaller than the batch size.
-    pub fn return_smaller_last_batch(&mut self) -> &mut BigIter2 {
+    pub fn return_smaller_last_batch(&mut self) -> &mut IterN2 {
         self.return_smaller_last_batch = true;
         self
     }
 }
 
-impl Iterator for BigIter2 {
+impl Iterator for IterN2 {
     type Item = (Vec<Tensor>, Vec<Tensor>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -139,25 +139,25 @@ mod tests {
     #[test]
     fn test_bigiter2_creation() {
         let (xs, ys) = create_test_data(3, 10);
-        let iter = BigIter2::new(&xs, &ys, 2);
+        let iter = IterN2::new(&xs, &ys, 2);
         assert_eq!(iter.total_size, 10);
         assert_eq!(iter.batch_size, 2);
 
         // Test creation with mismatched lengths
         let (xs, mut ys) = create_test_data(3, 10);
         ys.pop();
-        assert!(BigIter2::f_new(&xs, &ys, 2).is_err());
+        assert!(IterN2::f_new(&xs, &ys, 2).is_err());
 
         // Test creation with mismatched sizes
         let (mut xs, ys) = create_test_data(3, 10);
         xs[0] = Tensor::arange(15.0, (Kind::Float, Device::Cpu)).view([15, 1]);
-        assert!(BigIter2::f_new(&xs, &ys, 2).is_err());
+        assert!(IterN2::f_new(&xs, &ys, 2).is_err());
     }
 
     #[test]
     fn test_bigiter2_iteration() {
         let (xs, ys) = create_test_data(2, 10);
-        let iter = BigIter2::new(&xs, &ys, 3);
+        let iter = IterN2::new(&xs, &ys, 3);
         let batches: Vec<_> = iter.collect();
 
         assert_eq!(batches.len(), 3); // Expect 3 batches, not 4
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn test_bigiter2_smaller_last_batch() {
         let (xs, ys) = create_test_data(2, 10);
-        let mut iter = BigIter2::new(&xs, &ys, 3);
+        let mut iter = IterN2::new(&xs, &ys, 3);
         iter.return_smaller_last_batch();
         let batches: Vec<_> = iter.collect();
 
@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn test_bigiter2_shuffle() {
         let (xs, ys) = create_test_data(2, 10);
-        let mut iter = BigIter2::new(&xs, &ys, 2);
+        let mut iter = IterN2::new(&xs, &ys, 2);
         iter.shuffle();
 
         let mut all_elements = Vec::new();
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn test_bigiter2_to_device() {
         let (xs, ys) = create_test_data(2, 10);
-        let mut iter = BigIter2::new(&xs, &ys, 2);
+        let mut iter = IterN2::new(&xs, &ys, 2);
         iter.to_device(Device::Cpu);
 
         for (batch_xs, batch_ys) in iter {
@@ -219,7 +219,7 @@ mod tests {
 
         // Set a fixed seed for reproducibility
         tch::manual_seed(42);
-        let mut big_iter = BigIter2::new(&xs, &ys, 3);
+        let mut big_iter = IterN2::new(&xs, &ys, 3);
         big_iter.shuffle();
 
         tch::manual_seed(42);
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn test_bigiter2_multiple_tensors() {
         let (xs, ys) = create_test_data(3, 10);
-        let iter = BigIter2::new(&xs, &ys, 2);
+        let iter = IterN2::new(&xs, &ys, 2);
 
         for (batch_xs, batch_ys) in iter {
             assert_eq!(batch_xs.len(), 3);
