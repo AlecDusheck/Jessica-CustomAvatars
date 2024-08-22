@@ -1,6 +1,5 @@
 use tch::Tensor;
-use crate::tensor_utils::validate_tensor;
-use crate::tensor_utils::validate_tensor_type;
+use tensor_utils::tensor::{validate_tensor, validate_tensor_type};
 
 pub fn precompute(
     voxel_w: &Tensor,
