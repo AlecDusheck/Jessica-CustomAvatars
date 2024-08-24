@@ -187,29 +187,16 @@ fn lbs(
     lbs_weights: &Tensor,
     pose2rot: bool,
 ) -> (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) {
-    println!("LBS function input shapes:");
-    println!("betas: {:?}", betas.size());
-    println!("pose: {:?}", pose.size());
-    println!("v_template: {:?}", v_template.size());
-    println!("shapedirs: {:?}", shapedirs.size());
-    println!("posedirs: {:?}", posedirs.size());
-    println!("j_regressor: {:?}", j_regressor.size());
-    println!("parents: {:?}", parents.size());
-    println!("lbs_weights: {:?}", lbs_weights.size());
-
     let batch_size = betas.size()[0].max(pose.size()[0]);
     let device = betas.device();
     let dtype = betas.kind();
 
     // Add shape contribution
     let shape_offsets = blend_shapes(betas, shapedirs);
-    println!("shape_offsets: {:?}", shape_offsets.size());
     let v_shaped = v_template + &shape_offsets;
-    println!("v_shaped: {:?}", v_shaped.size());
 
     // Get the joints
     let j = vertices2joints(j_regressor, &v_shaped);
-    println!("j: {:?}", j.size());
 
     // Add pose blend shapes
     let ident = Tensor::eye(3, (dtype, device));
@@ -225,31 +212,23 @@ fn lbs(
         let pose_offsets = Tensor::matmul(&pose_feature.view([batch_size, -1]), posedirs).view([batch_size, -1, 3]);
         (rot_mats, pose_offsets)
     };
-    println!("pose_offsets: {:?}", pose_offsets.size());
-
 
     let v_posed = &pose_offsets + &v_shaped;
-    println!("v_posed: {:?}", v_posed.size());
-
+    
     // Get the global joint location
     let (j_transformed, a) = batch_rigid_transform(&rot_mats, &j, parents, dtype);
-    println!("j_transformed: {:?}", j_transformed.size());
-    println!("a: {:?}", a.size());
 
     // Do skinning:
     let w = lbs_weights.unsqueeze(0).expand(&[batch_size, -1, -1], false);
-    println!("w: {:?}", w.size());
     let num_joints = j_regressor.size()[0];
     let t = Tensor::matmul(&w, &a.view([batch_size, num_joints, 16]))
         .view([batch_size, -1, 4, 4]);
-    println!("t: {:?}", t.size());
 
     let homogen_coord = Tensor::ones(&[batch_size, v_posed.size()[1], 1], (dtype, device));
     let v_posed_homo = Tensor::cat(&[&v_posed, &homogen_coord], 2);
     let v_homo = Tensor::matmul(&t, &v_posed_homo.unsqueeze(-1));
 
     let verts = v_homo.i((.., .., ..3, 0));
-    println!("verts: {:?}", verts.size());
 
     (verts, j_transformed, a, t, shape_offsets, pose_offsets)
 }
@@ -392,6 +371,9 @@ fn batch_rigid_transform(
     let mut transform_chain = vec![transforms_mat.i((.., 0))];
     for i in 1..parents.size()[0] {
         let parent_idx = parents.i(i).int64_value(&[]) as usize;
+        // We will run into problems if we don't have a valid skeletal hierarchy
+        assert!(parent_idx < i as usize, "Invalid parent index {} for joint {}", parent_idx, i);
+        
         let curr_res = transform_chain[parent_idx].matmul(&transforms_mat.i((.., i)));
         transform_chain.push(curr_res);
     }
@@ -485,15 +467,23 @@ fn test_lbs() {
     let num_vertices = 6890;
     let num_joints = 24;
     let num_betas = 10;
-    let num_pose_params = 24 * 3;  // 24 joints, 3 rotation parameters each
+    let num_pose_params = num_joints * 3;  // 24 joints, 3 rotation parameters each
 
+    // Calculate num_pose_basis
+    let num_pose_basis = (num_joints * 3 * 3) - (3 * 3);  // (24 * 3 * 3) - (3 * 3) = 207
+    
     let betas = Tensor::randn(&[batch_size, num_betas], (Kind::Float, device));
     let pose = Tensor::randn(&[batch_size, num_pose_params], (Kind::Float, device));
     let v_template = Tensor::randn(&[num_vertices, 3], (Kind::Float, device));
     let shapedirs = Tensor::randn(&[num_vertices, 3, num_betas], (Kind::Float, device));
-    let posedirs = Tensor::randn(&[num_pose_params - 3, num_vertices * 3], (Kind::Float, device));
+    let posedirs = Tensor::randn(&[num_pose_basis, num_vertices * 3], (Kind::Float, device));
     let j_regressor = Tensor::randn(&[num_joints, num_vertices], (Kind::Float, device));
-    let parents = Tensor::randint(num_joints, &[num_joints], (Kind::Int64, device));
+    
+    // let parents = Tensor::randint(num_joints, &[num_joints], (Kind::Int64, device));
+    // Random ints will NOT work, since we need to ensure our hierarchy is correct for joints
+    let parents: Vec<i64> = vec![-1, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 12, 13, 14, 16, 17, 18, 19, 20, 21];
+    let parents = Tensor::from_slice(&parents).to_kind(Kind::Int64).to_device(device);
+    
     let lbs_weights = Tensor::rand(&[num_vertices, num_joints], (Kind::Float, device));
 
     println!("Input tensor shapes:");
