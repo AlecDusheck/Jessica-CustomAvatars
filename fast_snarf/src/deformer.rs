@@ -1,7 +1,7 @@
 use std::fmt::{Debug};
 use knn_points::knn::knn_idx_cuda;
 use tch::{Device, IndexOp, Kind, nn, Tensor};
-use tch::nn::ModuleT;
+use tensor_utils::module::ModuleMT;
 use crate::filter::filter;
 use crate::fuse::fuse;
 use crate::precompute::precompute;
@@ -25,43 +25,64 @@ pub struct ForwardDeformer {
     voxel_j: Tensor,
 }
 
-impl ModuleT for ForwardDeformer {
-    fn forward_t(&self, xs: &Tensor, train: bool) -> Tensor {
-        // The input tensor `xs` is assumed to be a concatenation of `xd` and `tfs` along the second dimension.
-        // We need to split `xs` into `xd` and `tfs` based on their original sizes.
+impl ModuleMT<(Tensor, Tensor), (Tensor, Tensor, Tensor)> for ForwardDeformer {
+    /// Performs the forward pass of the deformer.
+    ///
+    /// # Arguments
+    ///
+    /// * `xd` - The deformed points in batch. Shape: [B, N, D]
+    /// * `cond` - The conditional input (unused in this implementation).
+    /// * `tfs` - The bone transformation matrices. Shape: [B, J, D+1, D+1]
+    /// * `train` - A boolean flag indicating whether the function is in train mode.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `xc` - The canonical correspondences. Shape: [B, N, I, D]
+    /// - ...`others` - Other tensors containing additional output tensors (not used in this implementation afaik).
+    ///
+    /// # Note
+    ///
+    /// This method assumes version 1 of the deformer.
+    fn forward_mt(&self, xs: (Tensor, Tensor), train: bool) -> (Tensor, Tensor, Tensor) {
+        let (xd, tfs) = xs;
 
-        // Get the size of the second dimension of `xs`.
-        let xs_dim1_size = xs.size()[1];
+        let (xc_opt, valid_ids, j_inv) = self.search(&xd, &tfs);
 
-        // Get the number of bones from the length of `init_bones` vector.
-        let num_bones = self.init_bones.len() as i64;
+        if !train {
+            return (xc_opt, valid_ids, j_inv);
+        }
 
-        // Assume the dimension of each point is 3 (x, y, z).
-        let point_dim = 3;
+        let xc_opt = xc_opt.detach();
 
-        // Calculate the size of the second dimension of `tfs`.
-        let tfs_dim1_size = num_bones * (point_dim + 1) * (point_dim + 1);
+        // Set the values of xc_opt to 0 where valid_ids is false
+        let mut xc_opt = xc_opt.detach();
+        xc_opt.copy_(&tch::no_grad(|| xc_opt.masked_fill(&valid_ids.logical_not(), 0.)));
 
-        // Get the size of the second dimension of `xd` by subtracting the size of `tfs` from `xs_dim1_size`.
-        let xd_dim1_size = xs_dim1_size - tfs_dim1_size;
+        // Extract the shape dimensions from xc_opt
+        let (n_batch, n_point, n_init, n_dim) = xc_opt.size4().unwrap();
 
-        // Split `xs` into `xd` and `tfs` using the calculated sizes.
-        let split_sizes = [xd_dim1_size, tfs_dim1_size];
-        let split_tensors = xs.split_with_sizes(&split_sizes, 1);
-        let xd = split_tensors[0].shallow_clone();
-        let tfs = split_tensors[1].shallow_clone();
+        let mask = valid_ids.shallow_clone();
+        // Perform forward skinning
+        let xd_opt = self.forward_skinning(&xc_opt, &tfs, Some(&mask));
 
-        // Reshape `xd` to its original shape of [B, N, D], where B is the batch size, N is the number of points, and D is the dimension of each point.
-        let xd = xd.view([-1, xd_dim1_size / point_dim, point_dim]);
+        // Get the inverse Jacobian for valid correspondences
+        let grad_inv = j_inv.masked_select(&mask);
 
-        // Reshape `tfs` to its original shape of [B, J, D+1, D+1], where B is the batch size, J is the number of bones, and D is the dimension of each point.
-        let tfs = tfs.view([-1, num_bones, point_dim + 1, point_dim + 1]);
+        // Calculate the correction term
+        let correction = &xd_opt - &xd_opt.detach();
 
-        // Call the `forward` method with the reshaped `xd` and `tfs` tensors.
-        let (xc, (valid_ids, _)) = self.forward_impl(&xd, &tfs, !train);
+        // Apply the inverse Jacobian to the correction term
+        let correction = bmv(&-grad_inv, &correction.unsqueeze(-1)).squeeze_dim(-1);
 
-        // Concatenate `xc` and `valid_ids` along the last dimension to create the final output tensor.
-        Tensor::cat(&[xc, valid_ids.unsqueeze(-1)], -1)
+        let mut xc = xc_opt;
+        // Apply the correction to valid correspondences
+        let _ = xc.masked_scatter_(&mask, &(xc.masked_select(&mask) + correction));
+
+        // Reshape xc to the original shape
+        xc = xc.view([n_batch, n_point, n_init, n_dim]);
+
+        (xc, valid_ids, j_inv)
     }
 }
 
@@ -89,68 +110,6 @@ impl ForwardDeformer {
             voxel_d: p.zeros("voxel_d", &[1]),
             voxel_j: p.zeros("voxel_j", &[1]),
         }
-    }
-
-    /// Performs the forward pass of the deformer.
-    ///
-    /// # Arguments
-    ///
-    /// * `xd` - The deformed points in batch. Shape: [B, N, D]
-    /// * `cond` - The conditional input (unused in this implementation).
-    /// * `tfs` - The bone transformation matrices. Shape: [B, J, D+1, D+1]
-    /// * `eval_mode` - A boolean flag indicating whether the function is in evaluation mode.
-    ///
-    /// # Returns
-    ///
-    /// A tuple containing:
-    /// - `xc` - The canonical correspondences. Shape: [B, N, I, D]
-    /// - `others` - A tuple containing additional output tensors (not used in this implementation).
-    ///
-    /// # Note
-    ///
-    /// This method assumes version 1 of the deformer.
-    pub fn forward_impl(
-        &self,
-        xd: &Tensor,
-        tfs: &Tensor,
-        eval_mode: bool,
-    ) -> (Tensor, (Tensor, Tensor)) {
-        let (xc_opt, valid_ids, j_inv) = self.search(xd, tfs);
-
-        if eval_mode {
-            return (xc_opt, (valid_ids, j_inv));
-        }
-
-        let xc_opt = xc_opt.detach();
-
-        // Set the values of xc_opt to 0 where valid_ids is false
-        let mut xc_opt = xc_opt.detach();
-        xc_opt.copy_(&tch::no_grad(|| xc_opt.masked_fill(&valid_ids.logical_not(), 0.)));
-
-        // Extract the shape dimensions from xc_opt
-        let (n_batch, n_point, n_init, n_dim) = xc_opt.size4().unwrap();
-
-        let mask = valid_ids.shallow_clone();
-        // Perform forward skinning
-        let xd_opt = self.forward_skinning(&xc_opt, tfs, Some(&mask));
-
-        // Get the inverse Jacobian for valid correspondences
-        let grad_inv = j_inv.masked_select(&mask);
-
-        // Calculate the correction term
-        let correction = &xd_opt - &xd_opt.detach();
-
-        // Apply the inverse Jacobian to the correction term
-        let correction = bmv(&-grad_inv, &correction.unsqueeze(-1)).squeeze_dim(-1);
-
-        let mut xc = xc_opt;
-        // Apply the correction to valid correspondences
-        let _ = xc.masked_scatter_(&mask, &(xc.masked_select(&mask) + correction));
-
-        // Reshape xc to the original shape
-        xc = xc.view([n_batch, n_point, n_init, n_dim]);
-
-        (xc, (valid_ids, j_inv))
     }
 
     /// Precomputes the voxel grid and Jacobian matrix using CUDA.

@@ -3,7 +3,7 @@
 	url = git@github.com:TriformHQ/knn-points-rs.git
 [submodule "tensor_utils"]
 	path = tensor_utils
-	url = https://github.com/TriformHQ/tch-tensor-utils.git
+	url = git@github.com:TriformHQ/tch-tensor-utils.git
 [submodule "3d-pose-rs"]
 	path = 3d-pose-rs
 	url = git@github.com:TriformHQ/3d-pose-rs.git
