@@ -35,17 +35,25 @@ fn main() {
         .include(&libtorch.join("include/torch"))
         .include(&libtorch.join("include/torch/csrc/api/include"))
         // TODO: Auto detect Python version and path
-        // .include("/usr/include/python3.10")
-        .include("/usr/include/python3.12")
+        .include("/usr/include/python3.10")
+        // .include("/usr/include/python3.12")
         .flag("-std=c++17")
         .flag("--expt-relaxed-constexpr");
 
-    // Set CUDA architecture flags if TORCH_CUDA_ARCH_LIST is set
-    if let Ok(arch_list) = env::var("TORCH_CUDA_ARCH_LIST") {
-        for arch in arch_list.split(',') {
-            build.flag(&format!("-gencode=arch=compute_{0},code=sm_{0}", arch));
-        }
-    }
+    // Add CUDA architecture flags
+    // These are compatible with CUDA 12.1 and cover a range including the GTX 1050
+    // TODO: probably remove these
+    // if env::var("SUPPORT_gtx1050").map(|v| v == "TRUE").unwrap_or(false) {
+        println!("cargo:warning=Applying GTX 1050 specific flags");
+        build
+            .flag("-O3")  // High optimization level
+            .flag("--use_fast_math")
+            .flag("-maxrregcount=64")  // Limit register usage
+            .flag("--ptxas-options=-v")  // Verbose output
+            .flag("-Xptxas")
+            .flag("-dlcm=ca")  // Cache all locals in L1
+            .flag("-gencode=arch=compute_61,code=sm_61");  // For GTX 1050
+    // }
 
     build
         .file("src/cuda/c_filter.cpp")
@@ -72,5 +80,5 @@ fn main() {
     // Rerun if certain environment variables change
     println!("cargo:rerun-if-env-changed=CUDA_PATH");
     println!("cargo:rerun-if-env-changed=LIBTORCH");
-    println!("cargo:rerun-if-env-changed=TORCH_CUDA_ARCH_LIST");
+    println!("cargo:rerun-if-env-changed=SUPPORT_gtx1050");
 }

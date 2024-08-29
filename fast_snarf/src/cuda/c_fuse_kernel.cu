@@ -20,7 +20,7 @@ using namespace at;
 using namespace at::cuda::detail;
 
 template <typename scalar_t, typename index_t>
-__device__ void fuse_J_inv_update(const index_t index, scalar_t *J_inv,
+__device__ __forceinline__ void fuse_J_inv_update(const index_t index, scalar_t *J_inv,
                                   scalar_t x0, scalar_t x1, scalar_t x2,
                                   scalar_t g0, scalar_t g1, scalar_t g2) {
   scalar_t J00 = J_inv[3 * 0 + 0];
@@ -109,142 +109,79 @@ static __forceinline__ __device__ scalar_t grid_sampler_compute_source_index(
 
 template <typename scalar_t, typename index_t>
 __device__ void grid_sampler_3d(
-    index_t i_batch, TensorInfo<scalar_t, index_t> input, scalar_t grid_x,
-    scalar_t grid_y, scalar_t grid_z,
-    // TensorInfo<scalar_t, index_t> output,
-    PackedTensorAccessor32<scalar_t, 5> input_p, // [1, 3, 8, 32, 32]
-    scalar_t *output,
-    // PackedTensorAccessor32<scalar_t, 3> output_p, // [1800000, 3, 1]
-    bool align_corners, bool nearest) {
+    index_t i_batch,
+    const TensorInfo<scalar_t, index_t>& input,
+    scalar_t grid_x, scalar_t grid_y, scalar_t grid_z,
+    const PackedTensorAccessor32<scalar_t, 5>& input_p,
+    scalar_t* output,
+    bool align_corners) {
 
-  index_t C = input.sizes[1];
-  index_t inp_D = input.sizes[2];
-  index_t inp_H = input.sizes[3];
-  index_t inp_W = input.sizes[4];
+    const index_t C = input.sizes[1];
+    const index_t inp_D = input.sizes[2];
+    const index_t inp_H = input.sizes[3];
+    const index_t inp_W = input.sizes[4];
 
-  index_t inp_sN = input.strides[0];
-  index_t inp_sC = input.strides[1];
-  index_t inp_sD = input.strides[2];
-  index_t inp_sH = input.strides[3];
-  index_t inp_sW = input.strides[4];
+    scalar_t ix = grid_sampler_compute_source_index(grid_x, inp_W, align_corners);
+    scalar_t iy = grid_sampler_compute_source_index(grid_y, inp_H, align_corners);
+    scalar_t iz = grid_sampler_compute_source_index(grid_z, inp_D, align_corners);
 
-  index_t out_sC = 1; // output size is same as grid size...
+    // For bilinear interpolation, we need the floor of the indices.
+    // Using static_cast<index_t> is faster than floor() for positive numbers.
+    index_t ix_tnw = static_cast<index_t>(ix);
+    index_t iy_tnw = static_cast<index_t>(iy);
+    index_t iz_tnw = static_cast<index_t>(iz);
 
-  // get the corresponding input x, y, z co-ordinates from grid
-  scalar_t ix = grid_x;
-  scalar_t iy = grid_y;
-  scalar_t iz = grid_z;
+    // Compute the fractional parts for interpolation weights.
+    scalar_t dx = ix - ix_tnw;
+    scalar_t dy = iy - iy_tnw;
+    scalar_t dz = iz - iz_tnw;
 
-  // c0 ix,iy,iz=-0.848051,0.592726,0.259927
-  // c1 ix,iy,iz=2.355216,24.687256,4.409743
+    // Precompute complements to reduce operations in the weight calculations.
+    scalar_t dx_complement = 1 - dx;
+    scalar_t dy_complement = 1 - dy;
+    scalar_t dz_complement = 1 - dz;
 
-  ix = grid_sampler_compute_source_index(ix, inp_W, align_corners);
-  iy = grid_sampler_compute_source_index(iy, inp_H, align_corners);
-  iz = grid_sampler_compute_source_index(iz, inp_D, align_corners);
-  if (!nearest) {
-    // get corner pixel values from (x, y, z)
-    // for 4d, we used north-east-south-west
-    // for 5d, we add top-bottom
-    index_t ix_tnw = static_cast<index_t>(::floor(ix));
-    index_t iy_tnw = static_cast<index_t>(::floor(iy));
-    index_t iz_tnw = static_cast<index_t>(::floor(iz));
+    // Precompute all weights. This reduces repeated computations in the loop.
+    const scalar_t weights[8] = {
+      dx_complement * dy_complement * dz_complement,
+      dx * dy_complement * dz_complement,
+      dx_complement * dy * dz_complement,
+      dx * dy * dz_complement,
+      dx_complement * dy_complement * dz,
+      dx * dy_complement * dz,
+      dx_complement * dy * dz,
+      dx * dy * dz
+    };
 
-    index_t ix_tne = ix_tnw + 1;
-    index_t iy_tne = iy_tnw;
-    index_t iz_tne = iz_tnw;
+    // Precompute index arrays. This simplifies the loop structure and
+    // allows for better compiler optimizations.
+    const index_t x_indices[2] = {ix_tnw, ix_tnw + 1};
+    const index_t y_indices[2] = {iy_tnw, iy_tnw + 1};
+    const index_t z_indices[2] = {iz_tnw, iz_tnw + 1};
 
-    index_t ix_tsw = ix_tnw;
-    index_t iy_tsw = iy_tnw + 1;
-    index_t iz_tsw = iz_tnw;
-
-    index_t ix_tse = ix_tnw + 1;
-    index_t iy_tse = iy_tnw + 1;
-    index_t iz_tse = iz_tnw;
-
-    index_t ix_bnw = ix_tnw;
-    index_t iy_bnw = iy_tnw;
-    index_t iz_bnw = iz_tnw + 1;
-
-    index_t ix_bne = ix_tnw + 1;
-    index_t iy_bne = iy_tnw;
-    index_t iz_bne = iz_tnw + 1;
-
-    index_t ix_bsw = ix_tnw;
-    index_t iy_bsw = iy_tnw + 1;
-    index_t iz_bsw = iz_tnw + 1;
-
-    index_t ix_bse = ix_tnw + 1;
-    index_t iy_bse = iy_tnw + 1;
-    index_t iz_bse = iz_tnw + 1;
-
-    // get surfaces to each neighbor:
-    scalar_t tnw = (ix_bse - ix) * (iy_bse - iy) * (iz_bse - iz);
-    scalar_t tne = (ix - ix_bsw) * (iy_bsw - iy) * (iz_bsw - iz);
-    scalar_t tsw = (ix_bne - ix) * (iy - iy_bne) * (iz_bne - iz);
-    scalar_t tse = (ix - ix_bnw) * (iy - iy_bnw) * (iz_bnw - iz);
-    scalar_t bnw = (ix_tse - ix) * (iy_tse - iy) * (iz - iz_tse);
-    scalar_t bne = (ix - ix_tsw) * (iy_tsw - iy) * (iz - iz_tsw);
-    scalar_t bsw = (ix_tne - ix) * (iy - iy_tne) * (iz - iz_tne);
-    scalar_t bse = (ix - ix_tnw) * (iy - iy_tnw) * (iz - iz_tnw);
-
-    for (index_t xyz = 0; xyz < C; xyz++) {
-      output[xyz] = 0;
-
-      if (within_bounds_3d(iz_tnw, iy_tnw, ix_tnw, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_tnw][iy_tnw][ix_tnw] * tnw;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_tnw * inp_sD + iy_tnw * inp_sH +
-        // ix_tnw * inp_sW] * tnw;
+    #pragma unroll
+    for (index_t c = 0; c < C; c++) {
+      scalar_t result = 0;
+      #pragma unroll
+      for (int k = 0; k < 2; k++) {
+        #pragma unroll
+        for (int j = 0; j < 2; j++) {
+          #pragma unroll
+          for (int i = 0; i < 2; i++) {
+            index_t x = x_indices[i];
+            index_t y = y_indices[j];
+            index_t z = z_indices[k];
+            // Bounds checking is necessary for correct behavior.
+            // Keeping it inside the innermost loop ensures we don't miss any out-of-bounds accesses.
+            if (within_bounds_3d(z, y, x, inp_D, inp_H, inp_W)) {
+              // This is faster than array indexing and uses fewer registers.
+              result += input_p[i_batch][c][z][y][x] * weights[(k<<2) | (j<<1) | i];
+            }
+          }
+        }
       }
-      if (within_bounds_3d(iz_tne, iy_tne, ix_tne, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_tne][iy_tne][ix_tne] * tne;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_tne * inp_sD + iy_tne * inp_sH +
-        // ix_tne * inp_sW] * tne;
-      }
-      if (within_bounds_3d(iz_tsw, iy_tsw, ix_tsw, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_tsw][iy_tsw][ix_tsw] * tsw;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_tsw * inp_sD + iy_tsw * inp_sH +
-        // ix_tsw * inp_sW] * tsw;
-      }
-      if (within_bounds_3d(iz_tse, iy_tse, ix_tse, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_tse][iy_tse][ix_tse] * tse;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_tse * inp_sD + iy_tse * inp_sH +
-        // ix_tse * inp_sW] * tse;
-      }
-      if (within_bounds_3d(iz_bnw, iy_bnw, ix_bnw, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_bnw][iy_bnw][ix_bnw] * bnw;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_bnw * inp_sD + iy_bnw * inp_sH +
-        // ix_bnw * inp_sW] * bnw;
-      }
-      if (within_bounds_3d(iz_bne, iy_bne, ix_bne, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_bne][iy_bne][ix_bne] * bne;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_bne * inp_sD + iy_bne * inp_sH +
-        // ix_bne * inp_sW] * bne;
-      }
-      if (within_bounds_3d(iz_bsw, iy_bsw, ix_bsw, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_bsw][iy_bsw][ix_bsw] * bsw;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_bsw * inp_sD + iy_bsw * inp_sH +
-        // ix_bsw * inp_sW] * bsw;
-      }
-      if (within_bounds_3d(iz_bse, iy_bse, ix_bse, inp_D, inp_H, inp_W)) {
-        output[xyz] += input_p[i_batch][xyz][iz_bse][iy_bse][ix_bse] * bse;
-        // *out_ptr_NCDHW += inp_ptr_NC[iz_bse * inp_sD + iy_bse * inp_sH +
-        // ix_bse * inp_sW] * bse;
-      }
+      output[c] = result;
     }
-  } else {
-    index_t ix_nearest = static_cast<index_t>(::round(ix));
-    index_t iy_nearest = static_cast<index_t>(::round(iy));
-    index_t iz_nearest = static_cast<index_t>(::round(iz));
-
-    for (index_t xyz = 0; xyz < C; xyz++) {
-      if (within_bounds_3d(iz_nearest, iy_nearest, ix_nearest, inp_D, inp_H,
-                           inp_W)) {
-        output[xyz] = input_p[i_batch][xyz][iz_nearest][iy_nearest][ix_nearest];
-      } else {
-        output[xyz] = static_cast<scalar_t>(0);
-      }
-    }
-  }
 }
 
 template <typename scalar_t, typename index_t>
@@ -297,7 +234,7 @@ __global__ void broyden_kernel(
                   scale[0][0][0] * (x_l[0] + offset[0][0][0]),
                   scale[0][0][1] * (x_l[1] + offset[0][0][1]),
                   scale[0][0][2] * (x_l[2] + offset[0][0][2]),
-                  grid_J_inv, J_local, true, false);
+                  grid_J_inv, J_local, true);
 
   scalar_t J_inv_local[9];
   J_inv_local[3 * 0 + 0] = J_local[4 * 0 + 0];
@@ -350,8 +287,7 @@ __global__ void broyden_kernel(
     scalar_t iz = scale[0][0][2] * (x_l[2] + offset[0][0][2]);
 
     // gx_new = g(x)
-    grid_sampler_3d(i_batch, voxel_J_ti, ix, iy, iz, grid_J_inv, J_local, true,
-                    false);
+    grid_sampler_3d(i_batch, voxel_J_ti, ix, iy, iz, grid_J_inv, J_local, true);
 
     gx_new[0] = J_local[4 * 0 + 0] * x_l[0] + J_local[4 * 0 + 1] * x_l[1] +
                 J_local[4 * 0 + 2] * x_l[2] + J_local[4 * 0 + 3] -
