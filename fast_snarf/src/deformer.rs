@@ -25,7 +25,7 @@ pub struct ForwardDeformer {
     voxel_j: Tensor,
 }
 
-impl ModuleMT<(Tensor, Tensor), (Tensor, Tensor, Tensor)> for ForwardDeformer {
+impl ModuleMT<(Tensor, Tensor), (Tensor, Tensor, Tensor)> for ForwardDeformer  {
     /// Performs the forward pass of the deformer.
     ///
     /// # Arguments

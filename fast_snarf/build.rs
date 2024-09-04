@@ -4,14 +4,10 @@ use std::path::PathBuf;
 fn main() {
     let cuda = PathBuf::from(env::var("CUDA_PATH").unwrap_or("/usr/local/cuda".to_string()));
     let cuda_include = cuda.join("include");
-    let libtorch = PathBuf::from(env::var("LIBTORCH").unwrap_or("/usr/local/libtorch".to_string()));
+    let libtorch = PathBuf::from(env::var("LIBTORCH").unwrap_or("/usr/local/torch/lib/python3.10/site-packages/torch".to_string()));
 
     println!("cargo:warning=CUDA_PATH: {:?}", cuda);
     println!("cargo:warning=libtorch path: {:?}", libtorch);
-
-    // TODO: remove, was having issues with my PyTorch install
-    println!("cargo:warning=libtorch include path: {:?}", libtorch.join("include"));
-    println!("cargo:warning=torch/all.h exists: {:?}", libtorch.join("include/torch/all.h").exists());
 
     println!("cargo:rustc-link-search=native={}", cuda.join("lib64").display());
     println!("cargo:rustc-link-search=native={}", libtorch.join("lib").display());
@@ -43,7 +39,7 @@ fn main() {
     // Add CUDA architecture flags
     // These are compatible with CUDA 12.1 and cover a range including the GTX 1050
     // TODO: probably remove these
-    // if env::var("SUPPORT_gtx1050").map(|v| v == "TRUE").unwrap_or(false) {
+    if env::var("SUPPORT_gtx1050").map(|v| v == "TRUE").unwrap_or(false) {
         println!("cargo:warning=Applying GTX 1050 specific flags");
         build
             .flag("-O3")  // High optimization level
@@ -53,7 +49,7 @@ fn main() {
             .flag("-Xptxas")
             .flag("-dlcm=ca")  // Cache all locals in L1
             .flag("-gencode=arch=compute_61,code=sm_61");  // For GTX 1050
-    // }
+    }
 
     build
         .file("src/cuda/c_filter.cpp")
