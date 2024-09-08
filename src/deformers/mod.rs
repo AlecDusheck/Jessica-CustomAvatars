@@ -1,2 +1,4 @@
-mod smpl_deformer;
-mod snarf_deformer;
+mod deformer;
+
+pub mod smpl_deformer;
+pub mod snarf_deformer;

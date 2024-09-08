@@ -1,37 +1,7 @@
 use tch::{nn, Device, IndexOp, Kind, Tensor};
 use knn_points::knn::knn_points;
 use three_d_pose_rs_lib::body_models::SMPL;
-
-/// Represents a bounding box with minimum and maximum vertices.
-pub struct BoundingBox {
-    min_vert: Tensor,
-    max_vert: Tensor,
-}
-
-/// Computes the bounding box from SMPL vertices.
-///
-/// # Arguments
-/// * `vs` - Vertex tensor of shape [1, num_vertices, 3]
-/// * `factor` - Scaling factor for the bounding box
-///
-/// # Returns
-/// * `BoundingBox` - The computed bounding box
-fn get_bbox_from_smpl(vs: &Tensor, factor: f64) -> BoundingBox {
-    assert_eq!(vs.size()[0], 1, "Expected batch size of 1 for vertices");
-
-    let (min_vert, _) = vs.min_dim(1, false);
-    let (max_vert, _) = vs.max_dim(1, false);
-
-    let c = (&max_vert + &min_vert) / 2.0;
-    let s = (&max_vert - &min_vert) / 2.0;
-    let (s, _) = s.max_dim(-1, false);
-    let s = &s * factor;
-
-    let min_vert = &c - s.unsqueeze(-1);
-    let max_vert = &c + s.unsqueeze(-1);
-
-    BoundingBox { min_vert, max_vert }
-}
+use crate::deformers::deformer::{get_bbox_from_smpl, BoundingBox, Deformer, Rays, SMPLParams};
 
 /// Represents an SMPL deformer for transforming points between world and canonical space.
 pub struct SMPLDeformer {
@@ -198,16 +168,10 @@ impl SMPLDeformer {
 
         (pts_cano.reshape(&[-1, 3]), valid.view(&[-1]))
     }
+}
 
-    /// Deforms points and computes RGB and sigma values for training.
-    ///
-    /// # Arguments
-    /// * `pts` - Points to deform
-    /// * `model` - Neural network model to evaluate deformed points
-    ///
-    /// # Returns
-    /// * `(Tensor, Tensor)` - RGB and sigma values
-    pub fn deform_train(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
+impl Deformer for SMPLDeformer {
+    fn deform_train(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
         let (pts_cano, valid) = self.deform(pts);
         let mut rgb_cano = Tensor::zeros(pts.size(), (Kind::Float, pts.device()));
         let mut sigma_cano = Tensor::ones(&[pts.size()[0], pts.size()[1]], (Kind::Float, pts.device())) * -1e5;
@@ -215,26 +179,18 @@ impl SMPLDeformer {
         if valid.any() {
             let valid_mask = valid.to_kind(Kind::Bool);
             let (rgb_valid, sigma_valid) = model(&pts_cano.masked_select(&valid_mask).reshape(&[-1, 3]));
-            rgb_cano.masked_scatter_(&valid_mask.unsqueeze(-1).expand_as(&rgb_cano), &rgb_valid);
-            sigma_cano.masked_scatter_(&valid_mask, &sigma_valid);
+            let _ = rgb_cano.masked_scatter_(&valid_mask.unsqueeze(-1).expand_as(&rgb_cano), &rgb_valid);
+            let _ = sigma_cano.masked_scatter_(&valid_mask, &sigma_valid);
 
             let valid = rgb_cano.isfinite().all_dim(-1, false) & sigma_cano.isfinite();
-            rgb_cano.masked_fill_(&valid.logical_not().unsqueeze(-1), 0.0);
-            sigma_cano.masked_fill_(&valid.logical_not(), -1e5);
+            let _ = rgb_cano.masked_fill_(&valid.logical_not().unsqueeze(-1), 0.0);
+            let _ = sigma_cano.masked_fill_(&valid.logical_not(), -1e5);
         }
 
         (rgb_cano, sigma_cano)
     }
 
-    /// Deforms points and computes RGB and sigma values for testing.
-    ///
-    /// # Arguments
-    /// * `pts` - Points to deform
-    /// * `model` - Neural network model to evaluate deformed points
-    ///
-    /// # Returns
-    /// * `(Tensor, Tensor)` - RGB and sigma values
-    pub fn deform_test(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
+    fn deform_test(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
         let (pts_cano, valid) = self.deform(pts);
         let mut rgb_cano = Tensor::zeros(pts.size(), (Kind::Float, pts.device()));
         let mut sigma_cano = Tensor::zeros(&[pts.size()[0], pts.size()[1]], (Kind::Float, pts.device()));
@@ -248,37 +204,4 @@ impl SMPLDeformer {
 
         (rgb_cano, sigma_cano)
     }
-
-    /// Calls the appropriate deformation method based on the evaluation mode.
-    ///
-    /// # Arguments
-    /// * `pts` - Points to deform
-    /// * `model` - Neural network model to evaluate deformed points
-    /// * `eval_mode` - Whether to use evaluation mode
-    ///
-    /// # Returns
-    /// * `(Tensor, Tensor)` - RGB and sigma values
-    pub fn call(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor), eval_mode: bool) -> (Tensor, Tensor) {
-        if eval_mode {
-            self.deform_test(pts, model)
-        } else {
-            self.deform_train(pts, model)
-        }
-    }
-}
-
-/// Represents the parameters for the SMPL model.
-pub struct SMPLParams {
-    pub betas: Tensor,
-    pub body_pose: Tensor,
-    pub global_orient: Tensor,
-    pub transl: Tensor,
-}
-
-/// Represents a ray with origin, direction, near and far bounds.
-pub struct Rays {
-    pub o: Tensor,
-    pub d: Tensor,
-    pub near: Tensor,
-    pub far: Tensor,
 }
