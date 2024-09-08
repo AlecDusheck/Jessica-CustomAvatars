@@ -7,3 +7,6 @@
 [submodule "3d-pose-rs"]
 	path = 3d-pose-rs
 	url = git@github.com:TriformHQ/3d-pose-rs.git
+[submodule "lpips-rs"]
+	path = lpips-rs
+	url = git@github.com:TriformHQ/lpips-rs.git
