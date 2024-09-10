@@ -1,0 +1,26 @@
+[package]
+name = "jessica-smpl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lazy_static = "1.4.0"
+jessica-utils = { path = "../jessica-utils" }
+pyo3 = { version = "0.22.2", features = ["extension-module", "gil-refs", "auto-initialize"] }
+indicatif = "0.17.0"
+serde_json = "1.0.125"
+
+[lib]
+name = "jessica_smpl_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "smpl_converter"
+path = "src/main.rs"
+
+[env]
+LIBTORCH = { value = "/usr/local/libtorch", relative = false }
+TORCH_CUDA_VERSION = "cu121"
+
+[lints]
+workspace = true

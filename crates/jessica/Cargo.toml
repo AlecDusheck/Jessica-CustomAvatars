@@ -1,0 +1,14 @@
+[package]
+name = "jessica"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jessica-fast-snarf = { path = "../jessica-fast-snarf" }
+renderer = { path = "../renderer" }
+jessica-knn-points = { path = "../jessica-knn-points" }
+jessica-utils = { path = "../jessica-utils" }
+jessica-smpl = { path = "../jessica-smpl" }
+
+[lints]
+workspace = true

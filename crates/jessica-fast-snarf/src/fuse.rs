@@ -1,5 +1,5 @@
 use tch::Tensor;
-use tensor_utils::tensor::{validate_tensor, validate_tensor_type};
+use jessica_utils::tensor::{validate_tensor, validate_tensor_type};
 
 pub fn fuse(
     x: &mut Tensor,

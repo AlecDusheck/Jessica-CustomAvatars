@@ -1,7 +1,7 @@
 use std::fmt::{Debug};
-use knn_points::knn::knn_idx_cuda;
+use jessica_knn_points::knn::knn_idx_cuda;
 use tch::{Device, IndexOp, Kind, nn, Tensor};
-use tensor_utils::module::ModuleMT;
+use jessica_utils::module::ModuleMT;
 use crate::filter::filter;
 use crate::fuse::fuse;
 use crate::precompute::precompute;

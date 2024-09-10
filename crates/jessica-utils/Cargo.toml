@@ -1,0 +1,13 @@
+[package]
+name = "jessica-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[env]
+LIBTORCH = { value = "/usr/local/libtorch", relative = false }
+TORCH_CUDA_VERSION = "cu121"
+
+[lints]
+workspace = true
