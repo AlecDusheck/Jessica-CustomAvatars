@@ -1,0 +1,3 @@
+[submodule "crates/jessica-tcnn-networks/path/to/submodule"]
+	path = crates/jessica-tcnn-networks/path/to/submodule
+	url = https://github.com/nvlabs/tiny-cuda-nn
