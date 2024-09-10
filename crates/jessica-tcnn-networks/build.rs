@@ -78,7 +78,9 @@ fn main() {
         .include(&libtorch.join("include"))
         .include(&libtorch.join("include/torch/csrc/api/include"))
         .include("/usr/include/python3.10")
+        .include("src/cpp/include")
         .include(&tiny_cuda_nn.join("include"))
+        .file("src/cpp/bindings.cpp")
         .file("src/cpp/tcnn.cpp")
         .flag("-std=c++17")
         .flag("--expt-relaxed-constexpr")
@@ -88,6 +90,7 @@ fn main() {
     println!("cargo:warning=Build script completed successfully.");
 
     // Specify dependencies
+    println!("cargo:rerun-if-changed=src/cpp/bindings.cpp");
     println!("cargo:rerun-if-changed=src/cpp/tcnn.cpp");
     println!("cargo:rerun-if-changed=tiny-cuda-nn/include");
     println!("cargo:rerun-if-changed=tiny-cuda-nn/src");
