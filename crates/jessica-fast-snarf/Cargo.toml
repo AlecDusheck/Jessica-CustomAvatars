@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tch.workspace = true
+torch-sys.workspace = true
+
 jessica-knn-points = { path = "../jessica-knn-points" }
 jessica-utils = { path = "../jessica-utils" }
 
 [build-dependencies]
-cc = "1.0"
+cc.workspace = true
 
 [env]
 LIBTORCH = { value = "/usr/local/libtorch", relative = false }

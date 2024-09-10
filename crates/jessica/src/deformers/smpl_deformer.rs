@@ -1,7 +1,7 @@
 use tch::{autocast, nn, Device, IndexOp, Kind, Tensor};
-use knn_points::knn::knn_points;
-use tensor_utils::module::ModuleMT;
-use three_d_pose_rs_lib::body_models::SMPL;
+use jessica_knn_points::knn::knn_points;
+use jessica_utils::module::ModuleMT;
+use jessica_smpl_lib::body_models::SMPL;
 use crate::deformers::deformer::{get_bbox_from_smpl, BoundingBox, Deformer, Rays, SMPLParams};
 
 /// Represents an SMPL deformer for transforming points between world and canonical space.

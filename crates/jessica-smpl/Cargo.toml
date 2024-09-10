@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tch.workspace = true
+torch-sys.workspace = true
+log.workspace = true
+
 lazy_static = "1.4.0"
 jessica-utils = { path = "../jessica-utils" }
 pyo3 = { version = "0.22.2", features = ["extension-module", "gil-refs", "auto-initialize"] }

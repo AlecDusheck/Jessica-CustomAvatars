@@ -5,10 +5,13 @@ edition = "2021"
 authors = ["Alec Dusheck", "Triform"]
 
 [dependencies]
+tch.workspace = true
+torch-sys.workspace = true
+
 jessica-utils = { path = "../jessica-utils" }
 
 [build-dependencies]
-cc = "1.0"
+cc.workspace = true
 
 [env]
 LIBTORCH = { value = "/usr/local/libtorch", relative = false }

@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tch.workspace = true
+torch-sys.workspace = true
 
 [env]
 LIBTORCH = { value = "/usr/local/libtorch", relative = false }

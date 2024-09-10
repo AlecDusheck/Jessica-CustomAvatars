@@ -13,7 +13,10 @@ members = [
 tch = "0.16.0"
 torch-sys = "0.16.0"
 log = "0.4.22"
+cc = "1.0"
 
 [env]
 LIBTORCH = { value = "/usr/local/libtorch", relative = false }
 TORCH_CUDA_VERSION = "cu121"
+
+[workspace.lints.clippy]

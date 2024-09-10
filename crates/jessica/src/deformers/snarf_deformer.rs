@@ -1,9 +1,9 @@
 use std::f64::consts::PI;
 use tch::{nn, Device, IndexOp, Kind, Tensor};
-use fast_snarf::fast_snarf_deformer::ForwardDeformer;
-use three_d_pose_rs_lib::body_models::{SMPLOutput, SMPL};
+use jessica_fast_snarf::fast_snarf_deformer::ForwardDeformer;
+use jessica_smpl_lib::body_models::{SMPLOutput, SMPL};
 use crate::deformers::deformer::{get_bbox_from_smpl, BoundingBox, Deformer, SMPLParams};
-use tensor_utils::module::ModuleMT;
+use jessica_utils::module::ModuleMT;
 
 /// Represents the SNARF deformer.
 pub struct SNARFDeformer {

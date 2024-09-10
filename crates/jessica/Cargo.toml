@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tch.workspace = true
+torch-sys.workspace = true
+
 jessica-fast-snarf = { path = "../jessica-fast-snarf" }
 renderer = { path = "../renderer" }
 jessica-knn-points = { path = "../jessica-knn-points" }
