@@ -1,9 +1,31 @@
-use tch::Tensor;
+use tch::{Kind, Tensor};
 
 /// Represents a bounding box with minimum and maximum vertices.
+#[derive(Debug)]
 pub struct BoundingBox {
     min_vert: Tensor,
     max_vert: Tensor,
+}
+
+impl BoundingBox {
+    pub fn new(min_vert: Tensor, max_vert: Tensor) -> Self {
+        BoundingBox { min_vert, max_vert }
+    }
+}
+
+impl From<Tensor> for BoundingBox {
+    fn from(tensor: Tensor) -> Self {
+        assert_eq!(tensor.size(), &[2, 3], "Expected tensor shape [2, 3]");
+        let min_vert = tensor.slice(0, 0, 1, 1).squeeze();
+        let max_vert = tensor.slice(0, 1, 2, 1).squeeze();
+        BoundingBox::new(min_vert, max_vert)
+    }
+}
+
+impl From<BoundingBox> for Tensor {
+    fn from(bbox: BoundingBox) -> Self {
+        Tensor::cat(&[bbox.min_vert.unsqueeze(0), bbox.max_vert.unsqueeze(0)], 0)
+    }
 }
 
 /// Represents the parameters for the SMPL model.
@@ -48,6 +70,12 @@ pub fn get_bbox_from_smpl(vs: &Tensor, factor: f64) -> BoundingBox {
 }
 
 pub trait Deformer {
+    /// Prepares the deformer with SMPL parameters.
+    ///
+    /// # Arguments
+    /// * `smpl_params` - A struct containing SMPL parameters
+    fn prepare_deformer(&mut self, smpl_params: &SMPLParams);
+    
     /// Deforms points and computes RGB and sigma values for training.
     ///
     /// # Arguments
@@ -67,7 +95,7 @@ pub trait Deformer {
     /// # Returns
     /// * `(Tensor, Tensor)` - RGB and sigma values
     fn deform_test(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor);
-
+    
     // Calls the appropriate deformation method based on the evaluation mode.
     ///
     /// # Arguments
