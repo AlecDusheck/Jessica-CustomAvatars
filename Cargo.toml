@@ -6,6 +6,7 @@ members = [
     "crates/jessica-fast-snarf",
     "crates/jessica-knn-points",
     "crates/jessica-smpl",
+    "crates/jessica-tcnn-networks",
     "crates/jessica-utils",
 ]
 

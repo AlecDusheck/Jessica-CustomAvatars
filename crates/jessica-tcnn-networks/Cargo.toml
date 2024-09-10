@@ -1,0 +1,15 @@
+[package]
+name = "jessica-tcnn-networks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tch.workspace = true
+torch-sys.workspace = true
+log.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+
+[lints]
+workspace = true
