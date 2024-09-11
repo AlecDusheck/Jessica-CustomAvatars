@@ -17,9 +17,10 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test && \
     update-alternatives --set gcc /usr/bin/gcc-12
 
 # Install Python 3.10 and dev headers
+# libfmt-dev is also needed now (for tiny-cuda-nn)
 RUN add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && \
-    apt-get install -y python3.10 python3.10-dev python3.10-venv python3-pip python3.10-distutils && \
+    apt-get install -y python3.10 python3.10-dev python3.10-venv python3-pip python3.10-distutils libfmt-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Set Python 3.10 as the default python version

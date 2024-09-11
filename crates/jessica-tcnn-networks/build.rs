@@ -15,6 +15,8 @@ fn main() {
     let build_path = tiny_cuda_nn.join("build");
     let lib_path = build_path.join("libtiny-cuda-nn.a");
 
+    let fmt_lib_dir = build_path.join("dependencies/fmt");
+
     // println!("cargo:warning=Expected tiny-cuda-nn library path: {:?}", lib_path);
 
     if !lib_path.exists() || env::var("FORCE_TCNN_BUILD").unwrap_or_default() == "true" {
@@ -55,14 +57,22 @@ fn main() {
         panic!("libtiny-cuda-nn.a not found at expected path: {:?}", lib_path);
     }
 
+    println!("cargo:rustc-link-search=native=/usr/local/lib");
     println!("cargo:rustc-link-search=native={}", cuda.join("lib64").display());
     println!("cargo:rustc-link-search=native={}", libtorch.join("lib").display());
     println!("cargo:rustc-link-search=native={}", build_path.display());
 
+    // for fmt
+    println!("cargo:rustc-link-search=native={}", fmt_lib_dir.display());
+
     // Link libraries
     println!("cargo:rustc-link-lib=stdc++");
     println!("cargo:rustc-link-lib=cudart");
+    println!("cargo:rustc-link-lib=cublas");
+    println!("cargo:rustc-link-lib=curand");
+    println!("cargo:rustc-link-lib=cuda");
     println!("cargo:rustc-link-lib=c10");
+    println!("cargo:rustc-link-lib=fmt"); // tiny-cuda-nn uses this, apparently
     println!("cargo:rustc-link-lib=torch_cpu");
     println!("cargo:rustc-link-lib=torch");
     println!("cargo:rustc-link-lib=torch_cuda");

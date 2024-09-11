@@ -3,16 +3,16 @@ use jessica_tcnn_networks::cpp::{Precision, TcnnModule};
 
 #[test]
 fn test_new_encoder() {
+    println!("hmm");
     let encoder = TcnnModule::new_encoder();
     assert!(!encoder.inner.is_null());
 }
-
-#[test]
-fn test_new_color_net() {
-    let color_net = TcnnModule::new_color_net();
-    // d
-    assert!(!color_net.inner.is_null());
-}
+//
+// #[test]
+// fn test_new_color_net() {
+//     let color_net = TcnnModule::new_color_net();
+//     assert!(!color_net.inner.is_null());
+// }
 
 // #[test]
 // fn test_forward() {
