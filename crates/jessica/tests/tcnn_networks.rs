@@ -7,27 +7,27 @@ fn test_new_encoder() {
     let encoder = TcnnModule::new_encoder();
     assert!(!encoder.inner.is_null());
 }
-//
-// #[test]
-// fn test_new_color_net() {
-//     let color_net = TcnnModule::new_color_net();
-//     assert!(!color_net.inner.is_null());
-// }
 
-// #[test]
-// fn test_forward() {
-//     let module = TcnnModule::new_encoder();
-//     let device = Device::Cuda(0);
-//     let batch_size = 2;
-//     let input = Tensor::rand(&[batch_size, module.n_input_dims() as i64], (Kind::Float, device));
-//     let params = Tensor::rand(&[module.n_params() as i64], (Kind::Float, device));
-//
-//     let (output, ctx) = module.forward(&input, &params);
-//     assert_eq!(output.size(), &[batch_size, module.n_output_dims() as i64]);
-//     assert_eq!(output.kind(), Kind::Float);
-//     assert_eq!(output.device(), device);
-// }
-//
+#[test]
+fn test_new_color_net() {
+    let color_net = TcnnModule::new_color_net();
+    assert!(!color_net.inner.is_null());
+}
+
+#[test]
+fn test_forward() {
+    let module = TcnnModule::new_encoder();
+    let device = Device::Cuda(0);
+    let batch_size = 2;
+    let input = Tensor::rand(&[batch_size, module.n_input_dims() as i64], (Kind::Float, device));
+    let params = Tensor::rand(&[module.n_params() as i64], (Kind::Float, device));
+
+    let (ctx, output) = module.forward(&input, &params);
+    assert_eq!(output.size(), &[batch_size, module.n_output_dims() as i64]);
+    assert_eq!(output.kind(), Kind::Float);
+    assert_eq!(output.device(), device);
+}
+
 // #[test]
 // fn test_backward() {
 //     let module = TcnnModule::new_encoder();

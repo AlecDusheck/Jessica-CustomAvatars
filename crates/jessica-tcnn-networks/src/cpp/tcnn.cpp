@@ -2,6 +2,7 @@
 #include "bindings.h"
 
 extern "C" Module* c_create_encoder() {
+    std::cout << "Hello";
     try {
         nlohmann::json encoding_config = {
             {"otype", "HashGrid"},
