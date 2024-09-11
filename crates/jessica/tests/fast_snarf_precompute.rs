@@ -1,4 +1,4 @@
-use fast_snarf::precompute::precompute;
+use jessica_fast_snarf::precompute::precompute;
 use tch::{Device, Tensor};
 
 #[test]

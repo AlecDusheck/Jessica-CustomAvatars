@@ -6,8 +6,8 @@ fn main() {
     let cuda_include = cuda.join("include");
     let libtorch = PathBuf::from(env::var("LIBTORCH").unwrap_or("/usr/local/torch/lib/python3.10/site-packages/torch".to_string()));
 
-    println!("cargo:warning=CUDA_PATH: {:?}", cuda);
-    println!("cargo:warning=libtorch path: {:?}", libtorch);
+    // println!("cargo:warning=CUDA_PATH: {:?}", cuda);
+    // println!("cargo:warning=libtorch path: {:?}", libtorch);
 
     println!("cargo:rustc-link-search=native={}", cuda.join("lib64").display());
     println!("cargo:rustc-link-search=native={}", libtorch.join("lib").display());

@@ -12,6 +12,7 @@ renderer = { path = "../renderer" }
 jessica-knn-points = { path = "../jessica-knn-points" }
 jessica-utils = { path = "../jessica-utils" }
 jessica-smpl = { path = "../jessica-smpl" }
+jessica-tcnn-networks = { path = "../jessica-tcnn-networks" }
 
 [lints]
 workspace = true

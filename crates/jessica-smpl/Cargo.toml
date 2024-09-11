@@ -22,9 +22,5 @@ path = "src/lib.rs"
 name = "smpl_converter"
 path = "src/main.rs"
 
-[env]
-LIBTORCH = { value = "/usr/local/libtorch", relative = false }
-TORCH_CUDA_VERSION = "cu121"
-
 [lints]
 workspace = true

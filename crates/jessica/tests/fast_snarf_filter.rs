@@ -1,4 +1,4 @@
-use fast_snarf::filter::filter;
+use jessica_fast_snarf::filter::filter;
 use tch::{Device, Kind, Tensor};
 
 // Helper function to create a random float tensor

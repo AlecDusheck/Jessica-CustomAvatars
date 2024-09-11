@@ -5,9 +5,9 @@ fn main() {
     let cuda = PathBuf::from(env::var("CUDA_PATH").unwrap_or("/usr/local/cuda".to_string()));
     let cuda_include = cuda.join("include");
     let libtorch = PathBuf::from(env::var("LIBTORCH").unwrap_or("/usr/local/torch/lib/python3.10/site-packages/torch".to_string()));
-
-    println!("cargo:warning=CUDA_PATH: {:?}", cuda);
-    println!("cargo:warning=libtorch path: {:?}", libtorch);
+    //
+    // println!("cargo:warning=CUDA_PATH: {:?}", cuda);
+    // println!("cargo:warning=libtorch path: {:?}", libtorch);
 
     println!("cargo:rustc-link-search=native={}", cuda.join("lib64").display());
     println!("cargo:rustc-link-search=native={}", libtorch.join("lib").display());
@@ -42,7 +42,7 @@ fn main() {
     // Specify dependencies
     println!("cargo:rerun-if-changed=src/cuda/c_knn.cpp");
     println!("cargo:rerun-if-changed=src/cuda/c_knn_kernel.cu");
-    println!("cargo:rerun-if-changed=src/cuda/dispatch.cuh");
-    println!("cargo:rerun-if-changed=src/cuda/mink.cuh");
-    println!("cargo:rerun-if-changed=src/cuda/index_utils.cuh");
+    println!("cargo:rerun-if-changed=src/cuda/utils/dispatch.cuh");
+    println!("cargo:rerun-if-changed=src/cuda/utils/mink.cuh");
+    println!("cargo:rerun-if-changed=src/cuda/utils/index_utils.cuh");
 }

@@ -8,14 +8,14 @@ fn main() {
     let libtorch = PathBuf::from(env::var("LIBTORCH").unwrap_or("/usr/local/torch/lib/python3.10/site-packages/torch".to_string()));
     let tiny_cuda_nn = PathBuf::from(env::current_dir().unwrap()).join("tiny-cuda-nn");
 
-    println!("cargo:warning=CUDA_PATH: {:?}", cuda);
-    println!("cargo:warning=libtorch path: {:?}", libtorch);
-    println!("cargo:warning=tiny-cuda-nn path: {:?}", tiny_cuda_nn);
+    // println!("cargo:warning=CUDA_PATH: {:?}", cuda);
+    // println!("cargo:warning=libtorch path: {:?}", libtorch);
+    // println!("cargo:warning=tiny-cuda-nn path: {:?}", tiny_cuda_nn);
 
     let build_path = tiny_cuda_nn.join("build");
     let lib_path = build_path.join("libtiny-cuda-nn.a");
 
-    println!("cargo:warning=Expected tiny-cuda-nn library path: {:?}", lib_path);
+    // println!("cargo:warning=Expected tiny-cuda-nn library path: {:?}", lib_path);
 
     if !lib_path.exists() || env::var("FORCE_TCNN_BUILD").unwrap_or_default() == "true" {
         println!("cargo:warning=Building tiny-cuda-nn...");
@@ -46,9 +46,9 @@ fn main() {
             panic!("Failed to build tiny-cuda-nn");
         }
 
-        println!("cargo:warning=tiny-cuda-nn build completed.");
+        // println!("cargo:warning=tiny-cuda-nn build completed.");
     } else {
-        println!("cargo:warning=Using existing tiny-cuda-nn build.");
+        // println!("cargo:warning=Using existing tiny-cuda-nn build.");
     }
 
     if !lib_path.exists() {

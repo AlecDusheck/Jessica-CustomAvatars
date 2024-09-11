@@ -1,4 +1,4 @@
-use fast_snarf::fuse::fuse;
+use jessica_fast_snarf::fuse::fuse;
 use tch::{Device, Tensor};
 
 #[test]

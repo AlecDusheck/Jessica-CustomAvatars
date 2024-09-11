@@ -42,6 +42,6 @@ fn main() {
     println!("cargo:rustc-env=LIBTORCH={}", libtorch.display());
     println!("cargo:rustc-env=LD_LIBRARY_PATH={}:{}", libtorch.join("lib").display(), python_libdir);
 
-    println!("cargo:warning=Using system PyTorch at: {}", libtorch.display());
-    println!("cargo:warning=Using Python libraries from: {}", python_libdir);
+    // println!("cargo:warning=Using system PyTorch at: {}", libtorch.display());
+    // println!("cargo:warning=Using Python libraries from: {}", python_libdir);
 }

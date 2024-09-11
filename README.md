@@ -11,7 +11,7 @@ For building, you'll need:
 - `nvcc` version for respective CUDA version
 - Rust (stable supported)
 - CUDA 12.1
-- PyTorch 2.3.0 installed (`/usr/local/libtorch`)
+- PyTorch 2.3.0 installed (`/usr/local/torch/lib/python3.10/site-packages/torch`)
 
 We can probably use other Python versions but this is not tested, the 3.10 path is hard-coded. If you'd like to use a different CUDA version, that'll probably work too. You will need to update your PyTorch version to whatever CUDA version you have installed. In addition, you'll need to update the `tch-rs` package across all repos the version for your CUDA install.
 

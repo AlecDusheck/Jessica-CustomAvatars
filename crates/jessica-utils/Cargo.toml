@@ -7,9 +7,5 @@ edition = "2021"
 tch.workspace = true
 torch-sys.workspace = true
 
-[env]
-LIBTORCH = { value = "/usr/local/libtorch", relative = false }
-TORCH_CUDA_VERSION = "cu121"
-
 [lints]
 workspace = true

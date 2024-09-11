@@ -1,4 +1,4 @@
-use knn_points::knn::{knn_backward_cuda, knn_idx_cuda, knn_points};
+use jessica_knn_points::knn::{knn_backward_cuda, knn_idx_cuda, knn_points};
 use tch::{Device, Kind, Tensor};
 
 #[test]

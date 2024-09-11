@@ -17,7 +17,7 @@ log = "0.4.22"
 cc = "1.0"
 
 [env]
-LIBTORCH = { value = "/usr/local/libtorch", relative = false }
+LIBTORCH = { value = "/usr/local/torch/lib/python3.10/site-packages/torch", relative = false }
 TORCH_CUDA_VERSION = "cu121"
 
 [workspace.lints.clippy]
