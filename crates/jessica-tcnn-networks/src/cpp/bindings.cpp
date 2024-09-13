@@ -235,7 +235,8 @@ void WrappedModule::initial_params(size_t seed, torch::Tensor output) {
     if (output.numel() != n_params()) {
         throw std::runtime_error("WrappedModule::initial_params: output tensor has incorrect number of elements");
     }
-    if (output.device() != torch::kCUDA) {
+
+    if (output.device().type() != torch::kCUDA) {
         throw std::runtime_error("WrappedModule::initial_params: output tensor must be on CUDA device");
     }
     if (output.dtype() != torch::kFloat32) {
