@@ -63,10 +63,6 @@ impl TcnnModule {
     }
 
     pub fn forward(&self, input: &Tensor, params: &Tensor) -> (Context, Tensor) {
-        println!("Rust: Module pointer: {:?}", self.inner);
-        println!("Rust: Input pointer: {:?}", input.as_ptr());
-        println!("Rust: Params pointer: {:?}", params.as_ptr());
-
         let output_type: Kind = match self.param_precision() {
             Precision::Fp32 => Kind::Float,
             Precision::Fp16 => Kind::Half,

@@ -49,13 +49,7 @@ void module_destroy(WrappedModule* module) {
 // Wrapper for fwd
 tcnn::cpp::Context* c_module_fwd(WrappedModule* module, at::Tensor& input, at::Tensor& params, at::Tensor& output) {
     try {
-        std::cout << "Input address: " << static_cast<void*>(&input) << std::endl;
-        std::cout << "Params address: " << static_cast<void*>(&params) << std::endl;
-
         auto ctx = module->fwd(input, params, output);
-
-        std::cout << "Output shape: " << output.sizes() << std::endl;
-
         return new tcnn::cpp::Context(std::move(ctx));
     } catch (const std::exception& e) {
         std::cerr << "C++ exception caught in fwd: " << e.what() << std::endl;
@@ -84,7 +78,6 @@ void c_module_bwd_bwd_input(WrappedModule* module, tcnn::cpp::Context* ctx, torc
 // Wrapper for initial_params
 void c_module_initial_params(WrappedModule* module, size_t seed, torch::Tensor output) {
     try {
-        std::cout << "Initial params seed: " << seed << std::endl;
         module->initial_params(seed, output);
     } catch (const std::exception& e) {
         std::cerr << "C++ exception caught: " << e.what() << std::endl;
@@ -178,7 +171,6 @@ const char* c_module_name(const WrappedModule* module) {
 }
 
 extern "C" WrappedModule* c_create_encoder() {
-    std::cout << "Hello\n";
     try {
         nlohmann::json encoding_config = {
             {"otype", "HashGrid"},

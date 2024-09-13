@@ -231,7 +231,6 @@ void WrappedModule::bwd_bwd_input(const tcnn::cpp::Context& ctx, torch::Tensor i
 }
 
 void WrappedModule::initial_params(size_t seed, torch::Tensor output) {
-	std::cout << "WrappedModule::initial_params: seed = " << seed << std::endl;
     // Validate the output tensor
     if (output.numel() != n_params()) {
         throw std::runtime_error("WrappedModule::initial_params: output tensor has incorrect number of elements");
