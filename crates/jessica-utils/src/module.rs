@@ -177,7 +177,7 @@ impl TensorCollection for (Tensor, Tensor, Tensor,
 }
 
 /// `ModuleMT` is a `tch-rs` `ModuleT` with support for `n` sized input / output tensors
-pub trait ModuleMT<Input, Output>: Send
+pub trait ModuleMT<Input, Output>
 where
     Input: TensorCollection,
     Output: TensorCollection,

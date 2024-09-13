@@ -3,8 +3,8 @@ use tch::{Kind, Tensor};
 /// Represents a bounding box with minimum and maximum vertices.
 #[derive(Debug)]
 pub struct BoundingBox {
-    min_vert: Tensor,
-    max_vert: Tensor,
+    pub min_vert: Tensor,
+    pub max_vert: Tensor,
 }
 
 impl BoundingBox {
