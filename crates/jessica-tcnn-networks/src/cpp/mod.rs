@@ -1,45 +1,37 @@
-use tch::{Tensor, Kind};
+use tch::{Device, Kind, Tensor};
 use torch_sys::*;
 
 #[repr(C)]
-pub struct Module {
-    _private: [u8; 0],
+pub struct WrappedModule {
+    _private: *mut std::ffi::c_void,
 }
 
 #[repr(C)]
 pub struct Context {
-    _private: [u8; 0],
+    _private: *mut std::ffi::c_void,
 }
 
 #[link(name = "rust_tcnn", kind = "static")]
 extern "C" {
     // Existing functions
-    fn c_create_encoder() -> *mut Module;
-    fn c_create_color_net() -> *mut Module;
-    fn c_module_free(module: *mut Module);
+    fn c_create_encoder() -> *mut WrappedModule;
+    fn c_create_color_net() -> *mut WrappedModule;
+    fn c_module_free(module: *mut WrappedModule);
 
-    fn batch_size_granularity() -> u32;
-    fn default_loss_scale(precision: Precision) -> f32;
-    fn free_temporary_memory();
-    fn has_networks() -> bool;
-    fn preferred_precision() -> Precision;
+    fn c_module_fwd(module: *mut WrappedModule, input: *const C_tensor, params: *const C_tensor, output: *mut C_tensor) -> *mut std::ffi::c_void;
+    fn c_module_bwd(module: *mut WrappedModule, ctx: *mut std::ffi::c_void, input: *const C_tensor, params: *const C_tensor, output: *const C_tensor, dL_doutput: *const C_tensor, dL_dinput: *mut C_tensor, dL_dparams: *mut C_tensor);
+    fn c_module_bwd_bwd_input(module: *mut WrappedModule, ctx: *mut std::ffi::c_void, input: *const C_tensor, params: *const C_tensor, dL_ddLdinput: *const C_tensor, dL_doutput: *const C_tensor, dL_ddLdoutput: *mut C_tensor, dL_dparams: *mut C_tensor, dL_dinput: *mut C_tensor);
+    fn c_module_initial_params(module: *mut WrappedModule, seed: usize, output: *const C_tensor);
 
-    // Updated Module functions
-    fn module_destroy(module: *mut Module);
-
-    fn module_fwd(module: *mut Module, input: *const C_tensor, params: *const C_tensor) -> (*mut Context, *mut C_tensor);
-    fn module_bwd(module: *mut Module, ctx: *mut Context, input: *const C_tensor, params: *const C_tensor, output: *const C_tensor, dL_doutput: *const C_tensor) -> (*mut C_tensor, *mut C_tensor);
-    fn module_bwd_bwd_input(module: *mut Module, ctx: *mut Context, input: *const C_tensor, params: *const C_tensor, dL_ddLdinput: *const C_tensor, dL_doutput: *const C_tensor) -> (*mut C_tensor, *mut C_tensor, *mut C_tensor);
-    fn module_initial_params(module: *mut Module, seed: usize) -> *mut C_tensor;
-
-    fn module_n_input_dims(module: *const Module) -> u32;
-    fn module_n_params(module: *const Module) -> u32;
-    fn module_param_precision(module: *const Module) -> Precision;
-    fn module_n_output_dims(module: *const Module) -> u32;
-    fn module_output_precision(module: *const Module) -> Precision;
+    fn c_module_n_input_dims(module: *const WrappedModule) -> u32;
+    fn c_module_n_params(module: *const WrappedModule) -> u32;
+    fn c_module_param_precision(module: *const WrappedModule) -> Precision;
+    fn c_module_n_output_dims(module: *const WrappedModule) -> u32;
+    fn c_module_output_precision(module: *const WrappedModule) -> Precision;
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub enum Precision {
     Fp32,
     Fp16,
@@ -55,7 +47,8 @@ pub enum LogSeverity {
 }
 
 pub struct TcnnModule {
-    pub inner: *mut Module,
+    // The inner C++ module (pointer)
+    pub inner: *mut WrappedModule,
 }
 
 impl TcnnModule {
@@ -70,73 +63,113 @@ impl TcnnModule {
     }
 
     pub fn forward(&self, input: &Tensor, params: &Tensor) -> (Context, Tensor) {
-        unsafe {
-            let (ctx_ptr, output_ptr) = module_fwd(self.inner, input.as_ptr(), params.as_ptr());
-            // TODO: this is bad
-            let ctx = Context { _private: [] }; // Create a new Context struct
-            let output = Tensor::from_ptr(output_ptr); // Assuming Tensor::from_ptr exists and takes a *mut tch::CModule
-            (ctx, output)
-        }
+        println!("Rust: Module pointer: {:?}", self.inner);
+        println!("Rust: Input pointer: {:?}", input.as_ptr());
+        println!("Rust: Params pointer: {:?}", params.as_ptr());
+
+        let output_type: Kind = match self.param_precision() {
+            Precision::Fp32 => Kind::Float,
+            Precision::Fp16 => Kind::Half,
+        };
+
+        let batch_size = input.size()[0];
+        let output_dims = self.n_output_dims() as i64;
+        let mut output = Tensor::zeros(&[batch_size, output_dims], (output_type, input.device()));
+
+        let ctx_ptr = unsafe {
+            c_module_fwd(self.inner, input.as_ptr(), params.as_ptr(), output.as_mut_ptr())
+        };
+
+        let ctx = Context { _private: ctx_ptr };
+
+        (ctx, output)
     }
 
     pub fn backward(&self, ctx: &Context, input: &Tensor, params: &Tensor, output: &Tensor, dL_doutput: &Tensor) -> (Tensor, Tensor) {
+        let mut dL_dinput = Tensor::zeros_like(input);
+
+        let dparams_type: Kind = match self.param_precision() {
+            Precision::Fp32 => Kind::Float,
+            Precision::Fp16 => Kind::Half,
+        };
+        
+        let mut dL_dparams = Tensor::zeros(&[self.n_params() as i64], (dparams_type, input.device()));
+
         unsafe {
-            let (dL_dinput_ptr, dL_dparams_ptr) = module_bwd(
+            c_module_bwd(
                 self.inner,
-                ctx as *const _ as *mut Context,
-                input.as_ptr() as *const C_tensor,
-                params.as_ptr() as *const C_tensor,
-                output.as_ptr() as *const C_tensor,
-                dL_doutput.as_ptr() as *const C_tensor
+                ctx._private,
+                input.as_ptr(),
+                params.as_ptr(),
+                output.as_ptr(),
+                dL_doutput.as_ptr(),
+                dL_dinput.as_mut_ptr(),
+                dL_dparams.as_mut_ptr(),
             );
-            let dL_dinput = Tensor::from_ptr(dL_dinput_ptr);
-            let dL_dparams = Tensor::from_ptr(dL_dparams_ptr);
-            (dL_dinput, dL_dparams)
         }
+
+        (dL_dinput, dL_dparams)
     }
 
+    // TODO: C++ exception caught in bwd_bwd_input: DifferentiableObject::backward_backward_input_impl: not implemented error
     pub fn backward_backward_input(&self, ctx: &Context, input: &Tensor, params: &Tensor, dL_ddLdinput: &Tensor, dL_doutput: &Tensor) -> (Tensor, Tensor, Tensor) {
+        let mut dL_ddLdoutput = Tensor::zeros_like(dL_doutput);
+
+        let dparams_type: Kind = match self.param_precision() {
+            Precision::Fp32 => Kind::Float,
+            Precision::Fp16 => Kind::Half,
+        };
+
+        let mut dL_dparams = Tensor::zeros(&[self.n_params() as i64], (dparams_type, input.device()));
+        let mut dL_dinput = Tensor::zeros_like(input);
+
         unsafe {
-            let (dL_ddLdoutput_ptr, dL_dparams_ptr, dL_dinput_ptr) = module_bwd_bwd_input(
+            c_module_bwd_bwd_input(
                 self.inner,
-                ctx as *const _ as *mut Context,
+                ctx._private,
                 input.as_ptr(),
-                params.as_ptr() as *const C_tensor,
-                dL_ddLdinput.as_ptr() as *const C_tensor,
-                dL_doutput.as_ptr() as *const C_tensor
+                params.as_ptr(),
+                dL_ddLdinput.as_ptr(),
+                dL_doutput.as_ptr(),
+                dL_ddLdoutput.as_mut_ptr(),
+                dL_dparams.as_mut_ptr(),
+                dL_dinput.as_mut_ptr(),
             );
-            let dL_ddLdoutput = Tensor::from_ptr(dL_ddLdoutput_ptr);
-            let dL_dparams = Tensor::from_ptr(dL_dparams_ptr);
-            let dL_dinput = Tensor::from_ptr(dL_dinput_ptr);
-            (dL_ddLdoutput, dL_dparams, dL_dinput)
         }
+
+        (dL_ddLdoutput, dL_dparams, dL_dinput)
     }
 
     pub fn initial_params(&self, seed: usize) -> Tensor {
+        let device = Device::Cuda(0);
+        let num_params = self.n_params() as i64;
+        let mut output = Tensor::zeros(&[num_params], (Kind::Float, device));
+        
         unsafe {
-            let ptr = module_initial_params(self.inner, seed);
-            Tensor::from_ptr(ptr).to_kind(Kind::Float)
+            c_module_initial_params(self.inner, seed, output.as_mut_ptr());
         }
+
+        output
     }
 
     pub fn n_input_dims(&self) -> u32 {
-        unsafe { module_n_input_dims(self.inner) }
+        unsafe { c_module_n_input_dims(self.inner) }
     }
 
     pub fn n_params(&self) -> u32 {
-        unsafe { module_n_params(self.inner) }
+        unsafe { c_module_n_params(self.inner) }
     }
 
     pub fn param_precision(&self) -> Precision {
-        unsafe { module_param_precision(self.inner) }
+        unsafe { c_module_param_precision(self.inner) }
     }
 
     pub fn n_output_dims(&self) -> u32 {
-        unsafe { module_n_output_dims(self.inner) }
+        unsafe { c_module_n_output_dims(self.inner) }
     }
 
     pub fn output_precision(&self) -> Precision {
-        unsafe { module_output_precision(self.inner) }
+        unsafe { c_module_output_precision(self.inner) }
     }
 }
 

@@ -26,13 +26,7 @@
  *  @author Thomas Müller, Jacob Munkberg, Jon Hasselgren, Or Perel, NVIDIA
  */
 
-#ifdef _MSC_VER
-#pragma warning(push, 0)
 #include <torch/extension.h>
-#pragma warning(pop)
-#else
-#include <torch/extension.h>
-#endif
 
 #include <ATen/cuda/CUDAUtils.h>
 #include <c10/cuda/CUDAGuard.h>
@@ -42,11 +36,8 @@
 #endif
 
 #include <json/json.hpp>
-
-#include <pybind11_json/pybind11_json.hpp>
-#include <pybind11/functional.h>
-
 #include <tiny-cuda-nn/cpp_api.h>
+#include "include/bindings.h"
 
 #define STRINGIFY(x) #x
 #define STR(x) STRINGIFY(x)
@@ -58,7 +49,8 @@ c10::ScalarType torch_type(tcnn::cpp::Precision precision) {
 	switch (precision) {
 		case tcnn::cpp::Precision::Fp32: return torch::kFloat32;
 		case tcnn::cpp::Precision::Fp16: return torch::kHalf;
-		default: throw std::runtime_error{"Unknown precision tcnn->torch"};
+		default:
+		    throw std::runtime_error{"Unknown precision torch->type"};
 	}
 }
 
@@ -72,279 +64,197 @@ void* void_data_ptr(torch::Tensor& tensor) {
 
 #define CHECK_INPUT(x) CHECK_THROW(x.device().is_cuda()); CHECK_THROW(x.is_contiguous())
 
-class Module {
-public:
-	Module(tcnn::cpp::Module* module) : m_module{module} {}
 
-    std::tuple<tcnn::cpp::Context, torch::Tensor> fwd(torch::Tensor input, torch::Tensor params) {
-		CHECK_INPUT(input);
-		CHECK_INPUT(params);
+WrappedModule::WrappedModule(tcnn::cpp::Module* module) : m_module{module} {}
 
-		// Types
-		CHECK_THROW(input.scalar_type() == torch::kFloat32);
-		CHECK_THROW(params.scalar_type() == c10_param_precision());
+tcnn::cpp::Context WrappedModule::fwd(torch::Tensor input, torch::Tensor params, torch::Tensor output) {
+    CHECK_INPUT(input);
+    CHECK_INPUT(params);
+    CHECK_INPUT(output);
 
-		// Sizes
-		CHECK_THROW(input.size(1) == n_input_dims());
-		CHECK_THROW(params.size(0) == n_params());
+    // Types
+    CHECK_THROW(input.scalar_type() == torch::kFloat32);
+    CHECK_THROW(params.scalar_type() == c10_param_precision());
+    CHECK_THROW(output.scalar_type() == c10_output_precision());
 
-		// Device
-		at::Device device = input.device();
-		CHECK_THROW(device == params.device());
+    // Sizes
+    CHECK_THROW(input.size(1) == n_input_dims());
+    CHECK_THROW(params.size(0) == n_params());
+    CHECK_THROW(output.size(0) == input.size(0));
+    CHECK_THROW(output.size(1) == n_output_dims());
 
-		const at::cuda::CUDAGuard device_guard{device};
-		cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    // Device
+    at::Device device = input.device();
+    CHECK_THROW(device == params.device());
+    CHECK_THROW(device == output.device());
 
-		uint32_t batch_size = input.size(0);
+    const at::cuda::CUDAGuard device_guard{device};
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
-		torch::Tensor output = torch::empty({ batch_size, n_output_dims() }, torch::TensorOptions().dtype(c10_output_precision()).device(device));
+    uint32_t batch_size = input.size(0);
 
-		tcnn::cpp::Context ctx;
-		if (!input.requires_grad() && !params.requires_grad()) {
-			m_module->inference(stream, batch_size, input.data_ptr<float>(), void_data_ptr(output), void_data_ptr(params));
-		} else {
-			ctx = m_module->forward(stream, batch_size, input.data_ptr<float>(), void_data_ptr(output), void_data_ptr(params), input.requires_grad());
-		}
+    tcnn::cpp::Context ctx;
+    if (!input.requires_grad() && !params.requires_grad()) {
+        m_module->inference(stream, batch_size, input.data_ptr<float>(), void_data_ptr(output), void_data_ptr(params));
+    } else {
+        ctx = m_module->forward(stream, batch_size, input.data_ptr<float>(), void_data_ptr(output), void_data_ptr(params), input.requires_grad());
+    }
 
-		return { std::move(ctx), output };
-	}
-
-	std::tuple<torch::Tensor, torch::Tensor> bwd(const tcnn::cpp::Context& ctx, torch::Tensor input, torch::Tensor params, torch::Tensor output, torch::Tensor dL_doutput) {
-		if (!ctx.ctx) {
-			throw std::runtime_error{"Module::bwd: called with invalid context. fwd likely (mistakenly) ran in inference mode."};
-		}
-
-		CHECK_INPUT(input);
-		CHECK_INPUT(params);
-		CHECK_INPUT(output);
-		CHECK_INPUT(dL_doutput);
-
-		// Types
-		CHECK_THROW(input.scalar_type() == torch::kFloat32);
-		CHECK_THROW(params.scalar_type() == c10_param_precision());
-		CHECK_THROW(output.scalar_type() == c10_output_precision());
-		CHECK_THROW(dL_doutput.scalar_type() == c10_output_precision());
-
-		// Sizes
-		CHECK_THROW(input.size(1) == n_input_dims());
-		CHECK_THROW(output.size(1) == n_output_dims());
-		CHECK_THROW(params.size(0) == n_params());
-		CHECK_THROW(output.size(0) == input.size(0));
-		CHECK_THROW(dL_doutput.size(0) == input.size(0));
-
-		// Device
-		at::Device device = input.device();
-		CHECK_THROW(device == params.device());
-		CHECK_THROW(device == output.device());
-		CHECK_THROW(device == dL_doutput.device());
-
-		const at::cuda::CUDAGuard device_guard{device};
-		cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-
-		uint32_t batch_size = input.size(0);
-
-		torch::Tensor dL_dinput;
-		if (input.requires_grad()) {
-			dL_dinput = torch::empty({ batch_size, input.size(1) }, torch::TensorOptions().dtype(torch::kFloat32).device(device));
-		}
-
-		torch::Tensor dL_dparams;
-		if (params.requires_grad()) {
-			dL_dparams = torch::empty({ n_params() }, torch::TensorOptions().dtype(c10_param_precision()).device(device));
-		}
-
-		if (input.requires_grad() || params.requires_grad()) {
-			m_module->backward(
-				stream,
-				ctx,
-				batch_size,
-				input.requires_grad() ? dL_dinput.data_ptr<float>() : nullptr,
-				void_data_ptr(dL_doutput),
-				params.requires_grad() ? void_data_ptr(dL_dparams) : nullptr,
-				input.data_ptr<float>(),
-				void_data_ptr(output),
-				void_data_ptr(params)
-			);
-		}
-
-		return { dL_dinput, dL_dparams };
-	}
-
-	std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> bwd_bwd_input(const tcnn::cpp::Context& ctx, torch::Tensor input, torch::Tensor params, torch::Tensor dL_ddLdinput, torch::Tensor dL_doutput) {
-		// from: dL_ddLdinput
-		// to:   dL_ddLdoutput, dL_dparams, dL_dinput
-
-		if (!ctx.ctx) {
-			throw std::runtime_error{"Module::bwd_bwd_input: called with invalid context. fwd likely (mistakenly) ran in inference mode."};
-		}
-
-		CHECK_INPUT(input);
-		CHECK_INPUT(params);
-		CHECK_INPUT(dL_ddLdinput);
-		CHECK_INPUT(dL_doutput);
-
-		// Types
-		CHECK_THROW(input.scalar_type() == torch::kFloat32);
-		CHECK_THROW(dL_ddLdinput.scalar_type() == torch::kFloat32);
-		CHECK_THROW(params.scalar_type() == c10_param_precision());
-		CHECK_THROW(dL_doutput.scalar_type() == c10_output_precision());
-
-		// Sizes
-		CHECK_THROW(input.size(1) == n_input_dims());
-		CHECK_THROW(dL_doutput.size(1) == n_output_dims());
-		CHECK_THROW(dL_ddLdinput.size(1) == n_input_dims());
-		CHECK_THROW(params.size(0) == n_params());
-		CHECK_THROW(dL_doutput.size(0) == input.size(0));
-		CHECK_THROW(dL_ddLdinput.size(0) == input.size(0));
-
-		// Device
-		at::Device device = input.device();
-		CHECK_THROW(device == params.device());
-		CHECK_THROW(device == dL_ddLdinput.device());
-		CHECK_THROW(device == dL_doutput.device());
-
-		const at::cuda::CUDAGuard device_guard{device};
-		cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-
-		uint32_t batch_size = input.size(0);
-
-		torch::Tensor dL_ddLdoutput;
-		if (dL_doutput.requires_grad()) {
-			dL_ddLdoutput = torch::zeros({ batch_size, n_output_dims() }, torch::TensorOptions().dtype(c10_output_precision()).device(device));
-		}
-
-		torch::Tensor dL_dparams;
-		if (params.requires_grad()) {
-			dL_dparams = torch::zeros({ n_params() }, torch::TensorOptions().dtype(c10_param_precision()).device(device));
-		}
-
-		torch::Tensor dL_dinput;
-		if (input.requires_grad()) {
-			dL_dinput = torch::zeros({ batch_size, n_input_dims() }, torch::TensorOptions().dtype(torch::kFloat32).device(device));
-		}
-
-		if (dL_doutput.requires_grad() || params.requires_grad()) {
-			m_module->backward_backward_input(
-				stream,
-				ctx,
-				batch_size,
-				dL_ddLdinput.data_ptr<float>(),
-				input.data_ptr<float>(),
-				(params.requires_grad() || input.requires_grad() ) ? void_data_ptr(dL_doutput) : nullptr,
-				params.requires_grad() ? void_data_ptr(dL_dparams) : nullptr,
-				dL_doutput.requires_grad() ? void_data_ptr(dL_ddLdoutput) : nullptr,
-				input.requires_grad() ? dL_dinput.data_ptr<float>() : nullptr,
-				void_data_ptr(params)
-			);
-		}
-
-		return {dL_ddLdoutput, dL_dparams, dL_dinput};
-	}
-
-	torch::Tensor initial_params(size_t seed) {
-		torch::Tensor output = torch::zeros({ n_params() }, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
-		m_module->initialize_params(seed, output.data_ptr<float>());
-		return output;
-	}
-
-	uint32_t n_input_dims() const { return m_module->n_input_dims(); }
-
-	uint32_t n_params() const { return (uint32_t)m_module->n_params(); }
-	tcnn::cpp::Precision param_precision() const { return m_module->param_precision(); }
-	c10::ScalarType c10_param_precision() const { return torch_type(param_precision()); }
-
-	uint32_t n_output_dims() const { return m_module->n_output_dims(); }
-	tcnn::cpp::Precision output_precision() const { return m_module->output_precision(); }
-	c10::ScalarType c10_output_precision() const { return torch_type(output_precision()); }
-
-	nlohmann::json hyperparams() const { return m_module->hyperparams(); }
-	std::string name() const { return m_module->name(); }
-
-
-private:
-	std::unique_ptr<tcnn::cpp::Module> m_module;
-};
-
-
-extern "C" {
-Module* create_network_with_input_encoding(uint32_t n_input_dims, uint32_t n_output_dims, const nlohmann::json& encoding, const nlohmann::json& network) {
-    return new Module(tcnn::cpp::create_network_with_input_encoding(n_input_dims, n_output_dims, encoding, network));
+    return std::move(ctx);
 }
 
-Module* create_network(uint32_t n_input_dims, uint32_t n_output_dims, const nlohmann::json& network) {
-    return new Module(tcnn::cpp::create_network(n_input_dims, n_output_dims, network));
+
+void WrappedModule::bwd(const tcnn::cpp::Context& ctx, torch::Tensor input, torch::Tensor params, torch::Tensor output, torch::Tensor dL_doutput, torch::Tensor dL_dinput, torch::Tensor dL_dparams) {
+    if (!ctx.ctx) {
+        throw std::runtime_error{"WrappedModule::bwd: called with invalid context. fwd likely (mistakenly) ran in inference mode."};
+    }
+
+    CHECK_INPUT(input);
+    CHECK_INPUT(params);
+    CHECK_INPUT(output);
+    CHECK_INPUT(dL_doutput);
+    CHECK_INPUT(dL_dinput);
+    CHECK_INPUT(dL_dparams);
+
+    // Types
+    CHECK_THROW(input.scalar_type() == torch::kFloat32);
+    CHECK_THROW(params.scalar_type() == c10_param_precision());
+    CHECK_THROW(output.scalar_type() == c10_output_precision());
+    CHECK_THROW(dL_doutput.scalar_type() == c10_output_precision());
+    CHECK_THROW(dL_dinput.scalar_type() == torch::kFloat32);
+    CHECK_THROW(dL_dparams.scalar_type() == c10_param_precision());
+
+    // Sizes
+    CHECK_THROW(input.size(1) == n_input_dims());
+    CHECK_THROW(output.size(1) == n_output_dims());
+    CHECK_THROW(params.size(0) == n_params());
+    CHECK_THROW(output.size(0) == input.size(0));
+    CHECK_THROW(dL_doutput.size(0) == input.size(0));
+    CHECK_THROW(dL_dinput.size(0) == input.size(0));
+    CHECK_THROW(dL_dinput.size(1) == n_input_dims());
+    CHECK_THROW(dL_dparams.size(0) == n_params());
+
+    // Device
+    at::Device device = input.device();
+    CHECK_THROW(device == params.device());
+    CHECK_THROW(device == output.device());
+    CHECK_THROW(device == dL_doutput.device());
+    CHECK_THROW(device == dL_dinput.device());
+    CHECK_THROW(device == dL_dparams.device());
+
+    const at::cuda::CUDAGuard device_guard{device};
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    uint32_t batch_size = input.size(0);
+
+    if (input.requires_grad() || params.requires_grad()) {
+        m_module->backward(
+            stream,
+            ctx,
+            batch_size,
+            input.requires_grad() ? dL_dinput.data_ptr<float>() : nullptr,
+            void_data_ptr(dL_doutput),
+            params.requires_grad() ? void_data_ptr(dL_dparams) : nullptr,
+            input.data_ptr<float>(),
+            void_data_ptr(output),
+            void_data_ptr(params)
+        );
+    }
 }
 
-Module* create_encoding(uint32_t n_input_dims, const nlohmann::json& encoding, tcnn::cpp::Precision requested_precision) {
-    return new Module(tcnn::cpp::create_encoding(n_input_dims, encoding, requested_precision));
+void WrappedModule::bwd_bwd_input(const tcnn::cpp::Context& ctx, torch::Tensor input, torch::Tensor params, torch::Tensor dL_ddLdinput, torch::Tensor dL_doutput, torch::Tensor dL_ddLdoutput, torch::Tensor dL_dparams, torch::Tensor dL_dinput) {
+    // from: dL_ddLdinput
+    // to:   dL_ddLdoutput, dL_dparams, dL_dinput
+
+    if (!ctx.ctx) {
+        throw std::runtime_error{"WrappedModule::bwd_bwd_input: called with invalid context. fwd likely (mistakenly) ran in inference mode."};
+    }
+
+    CHECK_INPUT(input);
+    CHECK_INPUT(params);
+    CHECK_INPUT(dL_ddLdinput);
+    CHECK_INPUT(dL_doutput);
+    CHECK_INPUT(dL_ddLdoutput);
+    CHECK_INPUT(dL_dparams);
+    CHECK_INPUT(dL_dinput);
+
+    // Types
+    CHECK_THROW(input.scalar_type() == torch::kFloat32);
+    CHECK_THROW(dL_ddLdinput.scalar_type() == torch::kFloat32);
+    CHECK_THROW(params.scalar_type() == c10_param_precision());
+    CHECK_THROW(dL_doutput.scalar_type() == c10_output_precision());
+    CHECK_THROW(dL_ddLdoutput.scalar_type() == c10_output_precision());
+    CHECK_THROW(dL_dparams.scalar_type() == c10_param_precision());
+    CHECK_THROW(dL_dinput.scalar_type() == torch::kFloat32);
+
+    // Sizes
+    CHECK_THROW(input.size(1) == n_input_dims());
+    CHECK_THROW(dL_doutput.size(1) == n_output_dims());
+    CHECK_THROW(dL_ddLdinput.size(1) == n_input_dims());
+    CHECK_THROW(params.size(0) == n_params());
+    CHECK_THROW(dL_doutput.size(0) == input.size(0));
+    CHECK_THROW(dL_ddLdinput.size(0) == input.size(0));
+    CHECK_THROW(dL_ddLdoutput.size(0) == input.size(0));
+    CHECK_THROW(dL_ddLdoutput.size(1) == n_output_dims());
+    CHECK_THROW(dL_dparams.size(0) == n_params());
+    CHECK_THROW(dL_dinput.size(0) == input.size(0));
+    CHECK_THROW(dL_dinput.size(1) == n_input_dims());
+
+    // Device
+    at::Device device = input.device();
+    CHECK_THROW(device == params.device());
+    CHECK_THROW(device == dL_ddLdinput.device());
+    CHECK_THROW(device == dL_doutput.device());
+    CHECK_THROW(device == dL_ddLdoutput.device());
+    CHECK_THROW(device == dL_dparams.device());
+    CHECK_THROW(device == dL_dinput.device());
+
+    const at::cuda::CUDAGuard device_guard{device};
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    uint32_t batch_size = input.size(0);
+
+    if (dL_doutput.requires_grad() || params.requires_grad() || input.requires_grad()) {
+        m_module->backward_backward_input(
+            stream,
+            ctx,
+            batch_size,
+            dL_ddLdinput.data_ptr<float>(),
+            input.data_ptr<float>(),
+            (params.requires_grad() || input.requires_grad()) ? void_data_ptr(dL_doutput) : nullptr,
+            params.requires_grad() ? void_data_ptr(dL_dparams) : nullptr,
+            dL_doutput.requires_grad() ? void_data_ptr(dL_ddLdoutput) : nullptr,
+            input.requires_grad() ? dL_dinput.data_ptr<float>() : nullptr,
+            void_data_ptr(params)
+        );
+    }
 }
 
-Module* module_create(tcnn::cpp::Module* internal_module) {
-    return new Module(internal_module);
+void WrappedModule::initial_params(size_t seed, torch::Tensor output) {
+	std::cout << "WrappedModule::initial_params: seed = " << seed << std::endl;
+    // Validate the output tensor
+    if (output.numel() != n_params()) {
+        throw std::runtime_error("WrappedModule::initial_params: output tensor has incorrect number of elements");
+    }
+    if (output.device() != torch::kCUDA) {
+        throw std::runtime_error("WrappedModule::initial_params: output tensor must be on CUDA device");
+    }
+    if (output.dtype() != torch::kFloat32) {
+        throw std::runtime_error("WrappedModule::initial_params: output tensor must have dtype float32");
+    }
+
+    m_module->initialize_params(seed, output.data_ptr<float>());
 }
 
-void module_destroy(Module* module) {
-    delete module;
-}
+uint32_t WrappedModule::n_input_dims() const { return m_module->n_input_dims(); }
 
-// Wrapper for fwd
-std::tuple<tcnn::cpp::Context*, torch::Tensor> module_fwd(Module* module, torch::Tensor input, torch::Tensor params) {
-    auto [ctx, output] = module->fwd(input, params);
-    return {new tcnn::cpp::Context(std::move(ctx)), output};
-}
+uint32_t WrappedModule::n_params() const { return (uint32_t)m_module->n_params(); }
+tcnn::cpp::Precision WrappedModule::param_precision() const { return m_module->param_precision(); }
+c10::ScalarType WrappedModule::c10_param_precision() const { return torch_type(param_precision()); }
 
-// Wrapper for bwd
-std::tuple<torch::Tensor, torch::Tensor> module_bwd(Module* module, tcnn::cpp::Context* ctx, torch::Tensor input, torch::Tensor params, torch::Tensor output, torch::Tensor dL_doutput) {
-    return module->bwd(*ctx, input, params, output, dL_doutput);
-}
+uint32_t WrappedModule::n_output_dims() const { return m_module->n_output_dims(); }
+tcnn::cpp::Precision WrappedModule::output_precision() const { return m_module->output_precision(); }
+c10::ScalarType WrappedModule::c10_output_precision() const { return torch_type(output_precision()); }
 
-// Wrapper for bwd_bwd_input
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> module_bwd_bwd_input(Module* module, tcnn::cpp::Context* ctx, torch::Tensor input, torch::Tensor params, torch::Tensor dL_ddLdinput, torch::Tensor dL_doutput) {
-    return module->bwd_bwd_input(*ctx, input, params, dL_ddLdinput, dL_doutput);
-}
-
-// Wrapper for initial_params
-torch::Tensor module_initial_params(Module* module, size_t seed) {
-    return module->initial_params(seed);
-}
-
-// Wrappers for other methods
-uint32_t module_n_input_dims(const Module* module) {
-    return module->n_input_dims();
-}
-
-uint32_t module_n_params(const Module* module) {
-    return module->n_params();
-}
-
-tcnn::cpp::Precision module_param_precision(const Module* module) {
-    return module->param_precision();
-}
-
-c10::ScalarType module_c10_param_precision(const Module* module) {
-    return module->c10_param_precision();
-}
-
-uint32_t module_n_output_dims(const Module* module) {
-    return module->n_output_dims();
-}
-
-tcnn::cpp::Precision module_output_precision(const Module* module) {
-    return module->output_precision();
-}
-
-c10::ScalarType module_c10_output_precision(const Module* module) {
-    return module->c10_output_precision();
-}
-
-const char* module_hyperparams(const Module* module) {
-    static std::string hyperparams_str;
-    hyperparams_str = module->hyperparams().dump();
-    return hyperparams_str.c_str();
-}
-
-const char* module_name(const Module* module) {
-    return module->name().c_str();
-}
-
-}  // extern "C"
+nlohmann::json WrappedModule::hyperparams() const { return m_module->hyperparams(); }
+std::string WrappedModule::name() const { return m_module->name(); }
