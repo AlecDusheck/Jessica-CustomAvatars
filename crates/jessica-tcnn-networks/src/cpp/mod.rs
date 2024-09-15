@@ -81,15 +81,15 @@ impl TcnnModule {
         (ctx, output)
     }
 
-    pub fn backward(&self, ctx: &Context, input: &Tensor, params: &Tensor, output: &Tensor, dL_doutput: &Tensor) -> (Tensor, Tensor) {
-        let mut dL_dinput = Tensor::zeros_like(input);
+    pub fn backward(&self, ctx: &Context, input: &Tensor, params: &Tensor, output: &Tensor, dl_doutput: &Tensor) -> (Tensor, Tensor) {
+        let mut dl_dinput = Tensor::zeros_like(input);
 
         let dparams_type: Kind = match self.param_precision() {
             Precision::Fp32 => Kind::Float,
             Precision::Fp16 => Kind::Half,
         };
         
-        let mut dL_dparams = Tensor::zeros(&[self.n_params() as i64], (dparams_type, input.device()));
+        let mut dl_dparams = Tensor::zeros(&[self.n_params() as i64], (dparams_type, input.device()));
 
         unsafe {
             c_module_bwd(
@@ -98,26 +98,26 @@ impl TcnnModule {
                 input.as_ptr(),
                 params.as_ptr(),
                 output.as_ptr(),
-                dL_doutput.as_ptr(),
-                dL_dinput.as_mut_ptr(),
-                dL_dparams.as_mut_ptr(),
+                dl_doutput.as_ptr(),
+                dl_dinput.as_mut_ptr(),
+                dl_dparams.as_mut_ptr(),
             );
         }
 
-        (dL_dinput, dL_dparams)
+        (dl_dinput, dl_dparams)
     }
 
     // TODO: C++ exception caught in bwd_bwd_input: DifferentiableObject::backward_backward_input_impl: not implemented error
-    pub fn backward_backward_input(&self, ctx: &Context, input: &Tensor, params: &Tensor, dL_ddLdinput: &Tensor, dL_doutput: &Tensor) -> (Tensor, Tensor, Tensor) {
-        let mut dL_ddLdoutput = Tensor::zeros_like(dL_doutput);
+    pub fn backward_backward_input(&self, ctx: &Context, input: &Tensor, params: &Tensor, dl_ddldinput: &Tensor, dl_doutput: &Tensor) -> (Tensor, Tensor, Tensor) {
+        let mut dl_ddldoutput = Tensor::zeros_like(dl_doutput);
 
         let dparams_type: Kind = match self.param_precision() {
             Precision::Fp32 => Kind::Float,
             Precision::Fp16 => Kind::Half,
         };
 
-        let mut dL_dparams = Tensor::zeros(&[self.n_params() as i64], (dparams_type, input.device()));
-        let mut dL_dinput = Tensor::zeros_like(input);
+        let mut dl_dparams = Tensor::zeros(&[self.n_params() as i64], (dparams_type, input.device()));
+        let mut dl_dinput = Tensor::zeros_like(input);
 
         unsafe {
             c_module_bwd_bwd_input(
@@ -125,15 +125,15 @@ impl TcnnModule {
                 ctx._private,
                 input.as_ptr(),
                 params.as_ptr(),
-                dL_ddLdinput.as_ptr(),
-                dL_doutput.as_ptr(),
-                dL_ddLdoutput.as_mut_ptr(),
-                dL_dparams.as_mut_ptr(),
-                dL_dinput.as_mut_ptr(),
+                dl_ddldinput.as_ptr(),
+                dl_doutput.as_ptr(),
+                dl_ddldoutput.as_mut_ptr(),
+                dl_dparams.as_mut_ptr(),
+                dl_dinput.as_mut_ptr(),
             );
         }
 
-        (dL_ddLdoutput, dL_dparams, dL_dinput)
+        (dl_ddldoutput, dl_dparams, dl_dinput)
     }
 
     pub fn initial_params(&self, seed: usize) -> Tensor {
