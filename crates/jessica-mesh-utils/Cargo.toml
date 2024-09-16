@@ -1,0 +1,16 @@
+[package]
+name = "jessica-mesh-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tch.workspace = true
+torch-sys.workspace = true
+log.workspace = true
+libc = "0.2.121"
+
+[build-dependencies]
+cc.workspace = true
+
+[lints]
+workspace = true

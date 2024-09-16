@@ -79,10 +79,8 @@ impl IterN2 {
     /// The shuffling is applied consistently across all tensors in `xs` and `ys`.
     pub fn shuffle(&mut self) -> &mut IterN2 {
         let index = Tensor::randperm(self.total_size, (Kind::Int64, self.device));
-        let shuffled_xs: Vec<Tensor> = self.xs.iter().map(|x| x.index_select(0, &index)).collect();
-        let shuffled_ys: Vec<Tensor> = self.ys.iter().map(|y| y.index_select(0, &index)).collect();
-        self.xs = shuffled_xs;
-        self.ys = shuffled_ys;
+        self.xs = self.xs.iter().map(|x| x.index_select(0, &index)).collect();
+        self.ys = self.ys.iter().map(|y| y.index_select(0, &index)).collect();
         self.batch_index = 0;
         self
     }

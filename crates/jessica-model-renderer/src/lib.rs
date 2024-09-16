@@ -1,2 +1,3 @@
 mod cuda;
-pub mod render;
+mod raymarcher_kernel;
+pub mod renderer;

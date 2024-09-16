@@ -3,7 +3,7 @@ use tch::{nn, Device, IndexOp, Kind, Tensor};
 use jessica_fast_snarf::fast_snarf_deformer::ForwardDeformer;
 use jessica_smpl_lib::body_models::{SMPLOutput, SMPL};
 use crate::deformers::deformer::{get_bbox_from_smpl, BoundingBox, Deformer, SMPLParams};
-use jessica_utils::module::ModuleMT;
+use jessica_utils::{module::ModuleMT, Model};
 
 /// Represents the SNARF deformer.
 pub struct SNARFDeformer {
@@ -180,7 +180,7 @@ impl Deformer for SNARFDeformer {
         self.smpl_outputs = smpl_outputs;
     }
 
-    fn deform_train(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
+    fn deform_train(&self, pts: &Tensor, model: &Model) -> (Tensor, Tensor) {
         // Deform the points to canonical space.
         let (pts_cano_all, valid) = self.deform(pts, true);
 
@@ -194,8 +194,9 @@ impl Deformer for SNARFDeformer {
             // Create a boolean mask for valid points.
             let valid_mask = valid.to_kind(Kind::Bool);
 
-            let (rgb_valid, sigma_valid) = tch::autocast(true, || model(&pts_cano_all.masked_select(&valid_mask).reshape(&[-1, 3])));
-
+            let (rgb_valid, sigma_valid) = tch::autocast(true, || {
+                model.forward_mt(pts_cano_all.masked_select(&valid_mask).reshape(&[-1, 3]), true)
+            });
             // Update the RGB and sigma values for valid points.
             let _ = rgb_cano.index_put_(&[Some(&valid_mask)], &rgb_valid, false);
             let _ = sigma_cano.index_put_(&[Some(&valid_mask)], &sigma_valid, false);
@@ -214,7 +215,7 @@ impl Deformer for SNARFDeformer {
         (rgb_cano, sigma_cano)
     }
 
-    fn deform_test(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
+    fn deform_test(&self, pts: &Tensor, model: &Model) -> (Tensor, Tensor) {
         // Deform the points to canonical space.
         let (pts_cano_all, valid) = self.deform(pts, false);
 
@@ -228,7 +229,9 @@ impl Deformer for SNARFDeformer {
             let valid_mask = valid.to_kind(Kind::Bool);
 
             // Apply the deformation model to the valid points.
-            let (rgb_valid, sigma_valid) = tch::autocast(true, || model(&pts_cano_all.masked_select(&valid_mask).reshape(&[-1, 3])));
+            let (rgb_valid, sigma_valid) = tch::autocast(true, || {
+                model.forward_mt(pts_cano_all.masked_select(&valid_mask).reshape(&[-1, 3]), false)
+            });
 
             // Update the RGB and sigma values for valid points.
             let _ = rgb_cano.index_put_(&[Some(&valid_mask)], &rgb_valid, false);

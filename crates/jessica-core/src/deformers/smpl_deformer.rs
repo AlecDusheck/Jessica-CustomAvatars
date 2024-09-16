@@ -1,6 +1,6 @@
     use tch::{autocast, nn, Device, IndexOp, Kind, Tensor};
     use jessica_knn_points::knn::knn_points;
-    use jessica_utils::module::ModuleMT;
+    use jessica_utils::{module::ModuleMT, Model};
     use jessica_smpl_lib::body_models::SMPL;
     use crate::deformers::deformer::{get_bbox_from_smpl, BoundingBox, Deformer, Rays, SMPLParams};
 
@@ -170,7 +170,7 @@
             self.w2s = w2s;
         }
 
-        fn deform_train(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
+        fn deform_train(&self, pts: &Tensor, model: &Model) -> (Tensor, Tensor) {
             let (pts_cano, valid) = self.deform(pts);
             let mut rgb_cano = Tensor::zeros(pts.size(), (Kind::Float, pts.device()));
             let mut sigma_cano = Tensor::ones(&[pts.size()[0], pts.size()[1]], (Kind::Float, pts.device())) * -1e5;
@@ -179,7 +179,9 @@
                 let valid_mask = valid.to_kind(Kind::Bool);
                 let pts_valid = pts_cano.masked_select(&valid_mask).reshape(&[-1, 3]);
 
-                let (rgb_valid, sigma_valid) = autocast(true, || model(&pts_valid));
+                let (rgb_valid, sigma_valid) = tch::autocast(true, || {
+                    model.forward_mt(pts_valid, true)
+                });
 
                 let _ = rgb_cano.index_put_(&[Some(&valid_mask)], &rgb_valid, false);
                 let _ = sigma_cano.index_put_(&[Some(&valid_mask)], &sigma_valid, false);
@@ -195,7 +197,7 @@
             (rgb_cano, sigma_cano)
         }
 
-        fn deform_test(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor) {
+        fn deform_test(&self, pts: &Tensor, model: &Model) -> (Tensor, Tensor) {
             let (pts_cano, valid) = self.deform(pts);
             let mut rgb_cano = Tensor::zeros(pts.size(), (Kind::Float, pts.device()));
             let mut sigma_cano = Tensor::zeros(&[pts.size()[0], pts.size()[1]], (Kind::Float, pts.device()));
@@ -204,7 +206,9 @@
                 let valid_mask = valid.to_kind(Kind::Bool);
                 let pts_valid = pts_cano.masked_select(&valid_mask).reshape(&[-1, 3]);
 
-                let (rgb_valid, sigma_valid) = autocast(true, || model(&pts_valid));
+                let (rgb_valid, sigma_valid) = tch::autocast(true, || {
+                    model.forward_mt(pts_valid, true)
+                });
 
                 let _ = rgb_cano.index_put_(&[Some(&valid_mask)], &rgb_valid, false);
                 let _ = sigma_cano.index_put_(&[Some(&valid_mask)], &sigma_valid, false);

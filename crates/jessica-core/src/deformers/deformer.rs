@@ -1,3 +1,4 @@
+use jessica_utils::Model;
 use tch::{Kind, Tensor};
 
 /// Represents a bounding box with minimum and maximum vertices.
@@ -84,7 +85,7 @@ pub trait Deformer {
     ///
     /// # Returns
     /// * `(Tensor, Tensor)` - RGB and sigma values
-    fn deform_train(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor);
+    fn deform_train(&self, pts: &Tensor, model: &Model) -> (Tensor, Tensor);
     
     /// Deforms points and computes RGB and sigma values for testing.
     ///
@@ -94,7 +95,7 @@ pub trait Deformer {
     ///
     /// # Returns
     /// * `(Tensor, Tensor)` - RGB and sigma values
-    fn deform_test(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor)) -> (Tensor, Tensor);
+    fn deform_test(&self, pts: &Tensor, model: &Model) -> (Tensor, Tensor);
     
     // Calls the appropriate deformation method based on the evaluation mode.
     ///
@@ -105,7 +106,7 @@ pub trait Deformer {
     ///
     /// # Returns
     /// * `(Tensor, Tensor)` - RGB and sigma values
-    fn call(&self, pts: &Tensor, model: &impl Fn(&Tensor) -> (Tensor, Tensor), eval_mode: bool) -> (Tensor, Tensor) {
+    fn call(&self, pts: &Tensor, model: &Model, eval_mode: bool) -> (Tensor, Tensor) {
         if eval_mode {
             self.deform_test(pts, model)
         } else {

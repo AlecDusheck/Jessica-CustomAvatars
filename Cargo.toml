@@ -2,13 +2,14 @@
 resolver = "2"
 
 members = [
-    "crates/jessica",
+    "crates/jessica-core",
     "crates/jessica-fast-snarf",
     "crates/jessica-knn-points",
     "crates/jessica-smpl",
     "crates/jessica-tcnn-networks",
     "crates/jessica-model-renderer",
     "crates/jessica-utils",
+    "crates/jessica-mesh-utils",
 ]
 
 [workspace.dependencies]
